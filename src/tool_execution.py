@@ -115,6 +115,10 @@ def _is_sensitive_path(resolved: str) -> bool:
     the lowercase form, so a case-sensitive check would let it slip past the
     deny-list in every file tool that relies on it.
     """
+    # Split on os.altsep too: on Windows "/" is an accepted separator, so
+    # "C:/Users/x/.ssh/config" must hit the deny-list. altsep is None on POSIX.
+    if os.altsep:
+        resolved = resolved.replace(os.altsep, os.sep)
     parts = [p.casefold() for p in resolved.split(os.sep)]
     filename = parts[-1] if parts else ""
 
