@@ -1181,7 +1181,7 @@ async def _auto_summarize_pass_single(days_back: int = 1, account_id: str | None
                                     alert_body = (
                                         f"Your AI assistant flagged this email as {urgency.upper()} urgency.\n\n"
                                         f"Reason: {reason}\n\n"
-                                        + (f"Open in Odysseus: {open_url}\n\n" if open_url else "")
+                                        + (f"Open in Maven: {open_url}\n\n" if open_url else "")
                                         + f"---\n"
                                         f"From: {sender}\n"
                                         f"Subject: {subject}\n"
@@ -1196,7 +1196,7 @@ async def _auto_summarize_pass_single(days_back: int = 1, account_id: str | None
                                         f'<p><a href="{_h.escape(open_url)}" '
                                         'style="display:inline-block;padding:8px 14px;background:#50fa7b;'
                                         'color:#000;text-decoration:none;border-radius:4px;font-weight:bold">'
-                                        'Open in Odysseus</a></p>'
+                                        'Open in Maven</a></p>'
                                     ) if open_url else ""
                                     alert_html = (
                                         f'<div style="font-family:system-ui,sans-serif;max-width:640px">'
@@ -1407,7 +1407,7 @@ def _scheduled_poll_once() -> dict:
             try:
                 # Atomically claim this row before doing any work. Two
                 # pollers can race here (the in-process asyncio task and an
-                # externally cron-driven `odysseus-mail poll-scheduled`, or
+                # externally cron-driven `maven-mail poll-scheduled`, or
                 # an admin running the CLI manually alongside the in-process
                 # one despite the ODYSSEUS_INPROCESS_POLLERS=0 guidance) -
                 # both can SELECT the same 'pending' row before either has
@@ -1498,7 +1498,7 @@ def _scheduled_poll_once() -> dict:
 async def _scheduled_email_poller():
     """Background task that checks for due scheduled emails every 30
     seconds. Each tick delegates to `_scheduled_poll_once`, which is
-    also exposed via the `odysseus-mail poll-scheduled` CLI for
+    also exposed via the `maven-mail poll-scheduled` CLI for
     cron-driven deployments."""
     import asyncio
 
@@ -1516,7 +1516,7 @@ _summarize_task = None
 def _inprocess_pollers_enabled() -> bool:
     """Honour `ODYSSEUS_INPROCESS_POLLERS` — set to `0`/`false`/`no`/`off`
     to disable the asyncio tasks so a cron / systemd-timer setup driving
-    `odysseus-mail poll-scheduled` is the sole external driver. The legacy
+    `maven-mail poll-scheduled` is the sole external driver. The legacy
     auto-summary/reply poller no longer starts here; scheduled Tasks own that
     work so Email settings are only feature gates, not a second scheduler."""
     import os
@@ -1534,7 +1534,7 @@ def _start_poller():
     if not _inprocess_pollers_enabled():
         logger.info(
             "In-process email pollers disabled (ODYSSEUS_INPROCESS_POLLERS=0); "
-            "drive `odysseus-mail poll-scheduled` externally."
+            "drive `maven-mail poll-scheduled` externally."
         )
         return
     import asyncio

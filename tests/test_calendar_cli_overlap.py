@@ -96,7 +96,7 @@ def _load_cli(monkeypatch, rows):
     db.CalendarEvent = cal_event
     db.CalendarCal = MagicMock()
     monkeypatch.setitem(sys.modules, "core.database", db)
-    path = ROOT / "scripts" / "odysseus-calendar"
+    path = ROOT / "scripts" / "maven-calendar"
     loader = importlib.machinery.SourceFileLoader("odysseus_calendar_cli", str(path))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)
