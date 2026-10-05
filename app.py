@@ -5,6 +5,10 @@ import sys
 import asyncio
 import time
 
+from src.brand import BRAND_NAME, apply_env_aliases
+
+apply_env_aliases()
+
 # On Windows, asyncio.create_subprocess_exec/shell require the ProactorEventLoop.
 # When started via `python -m uvicorn` from a terminal, uvicorn sets this
 # automatically. But the VS Code debugger (and other non-uvicorn entrypoints)
@@ -126,7 +130,7 @@ logger = logging.getLogger(__name__)
 # and passed to FastAPI so we can use the modern context-manager lifecycle
 # instead of the deprecated @app.on_event("startup"/"shutdown") decorators.
 app = FastAPI(
-    title="AI Chat Application",
+    title=BRAND_NAME,
     description="Comprehensive AI chat with memory, research, and multi-modal capabilities",
     version="1.0.0",
 )

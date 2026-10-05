@@ -2,6 +2,10 @@
 """Application-wide constants and configuration values."""
 import os
 
+from src.brand import apply_env_aliases
+
+apply_env_aliases()  # MAVEN_AI_* <-> ODYSSEUS_*; must run before any getenv below
+
 from src.runtime_paths import get_app_root, get_default_data_dir
 
 APP_VERSION = "1.0.3"
