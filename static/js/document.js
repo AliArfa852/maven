@@ -3297,8 +3297,8 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
       _afterOdysseusAttachmentsAdded(1, label || data.filename);
       if (!opts.keepOpen) _closeOdysseusAttachMenu();
     } catch (err) {
-      console.error('Failed to attach Odysseus item:', err);
-      if (uiModule) uiModule.showError('Failed to attach from Odysseus');
+      console.error('Failed to attach Maven item:', err);
+      if (uiModule) uiModule.showError('Failed to attach from Maven');
     }
   }
 
@@ -3343,11 +3343,11 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
           added += 1;
         }
       }
-      _afterOdysseusAttachmentsAdded(added, zip ? 'odysseus-attachments.zip' : undefined);
+      _afterOdysseusAttachmentsAdded(added, zip ? 'maven-attachments.zip' : undefined);
       _closeOdysseusAttachMenu();
     } catch (err) {
-      console.error('Failed to attach selected Odysseus items:', err);
-      if (uiModule) uiModule.showError(added ? `Attached ${added}, then failed` : 'Failed to attach from Odysseus');
+      console.error('Failed to attach selected Maven items:', err);
+      if (uiModule) uiModule.showError(added ? `Attached ${added}, then failed` : 'Failed to attach from Maven');
       _renderComposeAttachments();
     } finally {
       if (btn) {
@@ -3421,7 +3421,7 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
       }
       _syncOdysseusAttachSelection(menu);
     } catch (err) {
-      console.error('Failed to load Odysseus attach items:', err);
+      console.error('Failed to load Maven attach items:', err);
       list.innerHTML = '<div class="email-odysseus-attach-empty">Could not load</div>';
     }
   }

@@ -20,7 +20,7 @@ def _load_cli(monkeypatch):
     svc = types.ModuleType("services.memory.memory")
     svc.MemoryManager = MagicMock()
     monkeypatch.setitem(sys.modules, "services.memory.memory", svc)
-    path = ROOT / "scripts" / "odysseus-memory"
+    path = ROOT / "scripts" / "maven-memory"
     loader = importlib.machinery.SourceFileLoader("odysseus_memory_cli_add", str(path))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)
