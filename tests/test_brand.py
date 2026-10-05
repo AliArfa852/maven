@@ -98,9 +98,7 @@ def test_data_dir_new_wins(tmp_path):
 
 def test_js_brand_parity():
     js = ROOT / "static" / "js" / "brand.js"
-    if not js.exists():
-        pytest.skip("static/js/brand.js not created yet (chat-core, S-1 stage 2); "
-                    "becomes a hard requirement in stage 4")
+    assert js.exists(), "static/js/brand.js must exist (S-1 stage 4: hard requirement)"
     text = js.read_text(encoding="utf-8")
     m = re.search(r"name\s*:\s*[\"']([^\"']+)[\"']", text)
     assert m, "brand.js declares no name"

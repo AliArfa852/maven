@@ -12,6 +12,7 @@ import os
 import time
 from typing import Dict, Optional, Tuple
 from urllib.parse import urlparse, parse_qs
+from src.brand import BRAND_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +166,7 @@ def build_provider(server_id: str, url: str, on_redirect=None):
     from mcp.shared.auth import OAuthClientMetadata
 
     client_metadata = OAuthClientMetadata(
-        client_name="Odysseus",
+        client_name=BRAND_NAME,
         redirect_uris=[REDIRECT_URI],
         grant_types=["authorization_code", "refresh_token"],
         response_types=["code"],
