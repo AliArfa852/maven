@@ -11,6 +11,7 @@ import os
 import re
 import asyncio 
 from typing import Any, Dict, List, Optional, Set, Tuple
+from src.brand import BRAND_NAME
 from src.database import McpServer, SessionLocal
 
 from src.runtime_paths import get_app_root
@@ -29,7 +30,7 @@ def _format_mcp_connection_error(name: str, command: str = "", args: Optional[Li
             f"{raw_error}\n\n"
             "Browser MCP could not start. On fresh installs, cache the Playwright MCP package once before connecting:\n\n"
             "npx -y @playwright/mcp@latest --version\n\n"
-            "Then restart Odysseus and reconnect the Browser MCP server."
+            "Then restart " + BRAND_NAME + " and reconnect the Browser MCP server."
         )
 
     return raw_error

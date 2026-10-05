@@ -14,6 +14,7 @@ import subprocess
 import sys
 
 from core.platform_compat import IS_WINDOWS, which_tool
+from src.brand import BRAND_NAME
 from src.runtime_paths import get_app_root
 
 logger = logging.getLogger(__name__)
@@ -215,9 +216,9 @@ async def register_builtin_servers(mcp_manager):
                     f"  Reason: npm package {pkg_spec!r} is not installed in the npx cache.\n"
                     f"  Impact: tools provided by this MCP server will be unavailable.\n"
                     f"  Fix:    {os.path.basename(npx_path)} -y {pkg_spec} --version\n"
-                    f"          (run once, then restart Odysseus)\n"
+                    f"          (run once, then restart " + BRAND_NAME + ")\n"
                     f"  Notes:  ODYSSEUS_BROWSER_MCP_REQUIRE_CACHE=1 is set, "
-                    f"so Odysseus will not install browser automation on startup."
+                    f"so {BRAND_NAME} will not install browser automation on startup."
                 )
                 continue
 

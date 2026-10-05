@@ -7,6 +7,7 @@ import time
 import collections
 from typing import Optional, Callable, Awaitable, Tuple, Dict
 from core.platform_compat import IS_WINDOWS, find_bash
+from src.brand import BRAND_NAME
 from src.constants import MAX_OUTPUT_CHARS
 
 DEFAULT_BASH_TIMEOUT = 60 * 60     # 1 hour
@@ -32,7 +33,7 @@ async def _create_bash_subprocess(command: str, **kwargs):
         if not bash:
             raise RuntimeError(
                 "Git Bash is required for the Bash tool on Windows; "
-                "install Git for Windows and restart Odysseus"
+                "install Git for Windows and restart " + BRAND_NAME
             )
         return await asyncio.create_subprocess_exec(bash, "-c", command, **kwargs)
     return await asyncio.create_subprocess_shell(command, **kwargs)
