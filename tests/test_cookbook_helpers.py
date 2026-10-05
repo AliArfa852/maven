@@ -426,7 +426,7 @@ def test_vllm_preflight_reports_cli_and_version():
 
     assert 'export PATH="$HOME/.local/bin:$PATH"' in script
     assert 'ODYSSEUS_VLLM_BIN="$(command -v vllm 2>/dev/null || true)"' in script
-    assert 'echo "[odysseus] vLLM CLI: $ODYSSEUS_VLLM_BIN"' in script
+    assert 'echo "[maven] vLLM CLI: $ODYSSEUS_VLLM_BIN"' in script
     assert '"$ODYSSEUS_VLLM_BIN" --version' in script
     assert 'ODYSSEUS_PREFLIGHT_EXIT=127' in script
 
