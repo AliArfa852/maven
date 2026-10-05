@@ -1,7 +1,7 @@
 {
-  "name": "Odysseus",
-  "short_name": "Odysseus",
-  "description": "Self-hosted AI chat with memory, documents, and tools",
+  "name": "Maven",
+  "short_name": "Maven",
+  "description": "Self-hosted, local-first AI workspace",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
