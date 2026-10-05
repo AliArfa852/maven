@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/branding/odysseus-wordmark.png" alt="Odysseus" width="238">
+  <img src="static/brand/maven-wordmark.svg" alt="Maven" width="238">
 </p>
 
 <p align="center">
@@ -14,22 +14,18 @@
 </p>
 
 <p align="center">
-  <a href="https://repology.org/project/odysseus-ai/versions"><img src="https://repology.org/badge/vertical-allrepos/odysseus-ai.svg" alt="Packaging status"></a>
-</p>
-
-<p align="center">
-  <img src="assets/branding/odysseus-browser.jpg" alt="Odysseus interface">
+  <img src="assets/branding/odysseus-browser.jpg" alt="Maven interface">
 </p>
 
 ---
 
 ## Quick Start
 
-> `dev` is the default branch and gets the newest changes first. Use [`main`](https://github.com/odysseus-dev/odysseus/tree/main) if you want the more curated branch.
+> `dev` is the default branch and gets the newest changes first.
 
 ```bash
-git clone https://github.com/odysseus-dev/odysseus.git
-cd odysseus
+git clone https://github.com/AliArfa852/maven.git
+cd maven
 cp .env.example .env
 docker compose up -d --build
 ```
@@ -44,6 +40,8 @@ The compose files pull the official multi-arch image `ghcr.io/odysseus-dev/odyss
 ODYSSEUS_IMAGE=ghcr.io/odysseus-dev/odysseus:1.0.2-7c8070f docker compose up -d
 ```
 
+Compose variables such as `ODYSSEUS_IMAGE` keep their names for now; app settings accept `MAVEN_AI_*`.
+
 Native installs, GPU notes, Windows/macOS instructions, HTTPS, and configuration live in the [setup guide](website/setup.md).
 
 ## Features
@@ -57,9 +55,9 @@ Native installs, GPU notes, Windows/macOS instructions, HTTPS, and configuration
 - **Notes, Tasks + Calendar** — reminders, todos, scheduled agent tasks, and CalDAV sync.
 - **Extras** — gallery/image editor, themes, uploads, web search, presets, sessions, and 2FA.
 
-## Demo
+## Based on Odysseus
 
-A full hover-to-play tour lives on the [Odysseus landing page](https://odysseus-dev.github.io/odysseus/). Its source lives under [`website/`](website/).
+Maven is a modified version of [Odysseus](https://github.com/odysseus-dev/odysseus), a self-hosted AI workspace by the Odysseus contributors. See [NOTICE.md](NOTICE.md) for details on the modifications and [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for licensing information.
 
 ## Contributing
 
@@ -67,22 +65,12 @@ Help is welcome. The best entry points are fresh-install testing, provider setup
 
 ## Security
 
-Odysseus is a self-hosted workspace with powerful local tools. Keep auth enabled, keep private data out of Git, and do not expose raw model/service ports publicly.
+Maven is a self-hosted workspace with powerful local tools. Keep auth enabled, keep private data out of Git, and do not expose raw model/service ports publicly.
 
 - Keep `AUTH_ENABLED=true` for any network-accessible deployment.
 - Keep `LOCALHOST_BYPASS=false` outside local development.
 
 Deployment details are in the [setup guide](website/setup.md#security-notes).
-
-## Star History
-
-<a href="https://star-history.dera.page/#odysseus-dev/odysseus&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=odysseus-dev/odysseus&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=odysseus-dev/odysseus&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=odysseus-dev/odysseus&type=date&legend=top-left" />
- </picture>
-</a>
 
 ## License
 
