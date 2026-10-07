@@ -43,7 +43,7 @@ ODY_USER="$(getent passwd "$PUID" | cut -d: -f1)"
 # to that group and later call gosu by username so supplementary groups are
 # retained.
 DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
-if [ "${ODYSSEUS_ENABLE_HOST_DOCKER:-}" = "true" ] && [ -S "$DOCKER_SOCK" ]; then
+if [ "${MAVEN_AI_ENABLE_HOST_DOCKER:-${ODYSSEUS_ENABLE_HOST_DOCKER:-}}" = "true" ] && [ -S "$DOCKER_SOCK" ]; then
     SOCK_GID="$(stat -c '%g' "$DOCKER_SOCK" 2>/dev/null || echo '')"
     if [ -n "$SOCK_GID" ] && [ "$SOCK_GID" != "0" ]; then
         if ! getent group "$SOCK_GID" >/dev/null 2>&1; then

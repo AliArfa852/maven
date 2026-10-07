@@ -11,7 +11,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-DOCKER_DIR="${ODYSSEUS_DEMO_MAIL_DIR:-$HOME/docker/snappymail}"
+DOCKER_DIR="${MAVEN_AI_DEMO_MAIL_DIR:-${ODYSSEUS_DEMO_MAIL_DIR:-$HOME/docker/snappymail}}"
 USERS_FILE="$DOCKER_DIR/dovecot/conf/users"
 DEMO_USER="demo@odysseus.local"
 DEMO_PASS="demodemo"

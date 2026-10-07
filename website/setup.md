@@ -85,7 +85,7 @@ cd odysseus
 It launches at `http://127.0.0.1:7860`. To expose it to your phone over a trusted LAN/VPN such as Tailscale, bind all interfaces:
 
 ```bash
-ODYSSEUS_HOST=0.0.0.0 ./start-macos.sh
+MAVEN_AI_HOST=0.0.0.0 ./start-macos.sh
 # then open http://<tailscale-ip>:7860
 ```
 
@@ -400,7 +400,7 @@ If `python` points at an older interpreter, use `py -3.12` (or another installed
 3.11+ version) for the venv step.
 
 **Exposing on a LAN/Tailscale (Windows):** the launcher binds to `127.0.0.1` and
-does **not** read `APP_BIND` / `ODYSSEUS_HOST` from `.env`, so editing `.env`
+does **not** read `APP_BIND` / `MAVEN_AI_HOST` from `.env`, so editing `.env`
 alone leaves the native Windows server on loopback. Pass the launcher's
 `-BindHost` flag instead:
 
@@ -436,7 +436,7 @@ If `chromadb-client` (the lightweight HTTP-only package) is installed alongside 
 
 ### HTTPS + LAN/Tailscale exposure
 To expose Odysseus on a local network or Tailscale with HTTPS:
-1. Change the bind address to `0.0.0.0` in `.env` (`APP_BIND=0.0.0.0` or `ODYSSEUS_HOST=0.0.0.0`).
+1. Change the bind address to `0.0.0.0` in `.env` (`APP_BIND=0.0.0.0` or `MAVEN_AI_HOST=0.0.0.0`).
 2. Generate a locally-trusted cert for your LAN/Tailscale IPs using [mkcert](https://github.com/FiloSottile/mkcert):
    ```bash
    mkcert -install

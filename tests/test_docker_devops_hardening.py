@@ -105,7 +105,7 @@ def test_docker_entrypoint_gates_socket_group_plumbing_on_explicit_opt_in():
     socket_group_block = script[block_start:block_end]
 
     opt_in_check = socket_group_block.index(
-        "[ \"${ODYSSEUS_ENABLE_HOST_DOCKER:-}\" = \"true\" ]"
+        "[ \"${MAVEN_AI_ENABLE_HOST_DOCKER:-${ODYSSEUS_ENABLE_HOST_DOCKER:-}}\" = \"true\" ]"
     )
     socket_check = socket_group_block.index("[ -S \"$DOCKER_SOCK\" ]")
     stat_socket = socket_group_block.index("stat -c")

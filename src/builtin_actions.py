@@ -16,6 +16,7 @@ from core.platform_compat import IS_WINDOWS, find_bash
 from core.constants import internal_api_base
 from src.constants import DATA_DIR, DEEP_RESEARCH_DIR, TIDY_CALENDAR_STATE_FILE, EMAIL_URGENCY_CACHE_DIR, COOKBOOK_STATE_FILE
 from src.interactive_gate import wait_for_interactive_quiet
+from src.brand import maven_env
 
 logger = logging.getLogger(__name__)
 
@@ -788,7 +789,7 @@ async def action_run_script(owner: str, script: str = "", host: str = "", **kwar
     """Run a script locally, or via SSH when a host is configured."""
     if not script:
         return "No script specified", False
-    target_host = (host or os.getenv("ODYSSEUS_SCRIPT_HOST", "localhost")).strip()
+    target_host = (host or maven_env("MAVEN_AI_SCRIPT_HOST", "localhost")).strip()
     if target_host in ("", "localhost", "127.0.0.1", "local"):
         if IS_WINDOWS and find_bash():
             return await _run_subprocess([find_bash(), "-c", script], timeout=300, label="Script")
@@ -3429,7 +3430,7 @@ BUILTIN_ACTION_INFO = {
     "daily_brief": "Build a morning digest: today's calendar, unread email count + top senders, active todos",
     "learn_sender_signatures": "LLM learns each sender's signature from 3+ of their recent emails; cached per address so future renders fold sigs reliably without heuristics",
     "ssh_command": "Run a shell command on a local or remote host",
-    "run_script": "Run a script locally or on ODYSSEUS_SCRIPT_HOST",
+    "run_script": "Run a script locally or on MAVEN_AI_SCRIPT_HOST",
     "test_skills": "Run the per-skill Test on every skill: agent run + LLM judge → records verdict on the skill (pass/needs_work/fail/inconclusive). Advisory only — never rewrites or demotes anything.",
     "audit_skills": "Audit unaudited skills after enough new skills are added: test, narrow metadata, self-edit/retry, optional teacher rewrite, tag duplicates/trivial skills, and publish/draft using the auto-approve threshold.",
     "check_email_urgency": "Scan unread emails hourly, tag urgent/reply-soon/newsletter/marketing/spam, and send a reminder when a new email needs a fast reply.",

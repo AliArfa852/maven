@@ -23,6 +23,7 @@ from src.upload_limits import (
 from src.constants import GENERATED_IMAGES_DIR
 from src.optional_deps import patch_realesrgan_torchvision_compat
 
+from src.brand import maven_env
 from routes.gallery.gallery_helpers import (
     GalleryPatch, _extract_exif, _image_to_dict, _owner_filter, _human_size,
 )
@@ -56,7 +57,7 @@ def _pil_image_to_b64(img, *, fmt: str = "PNG") -> str:
 
 
 def _load_sam_backend():
-    model_id = os.getenv("ODYSSEUS_SAM_MODEL", "facebook/sam-vit-base")
+    model_id = maven_env("MAVEN_AI_SAM_MODEL", "facebook/sam-vit-base")
     cached = _SAM_STATE.get(model_id)
     if cached:
         return cached
@@ -92,7 +93,7 @@ def _load_sam_backend():
 
 
 def _load_grounding_backend():
-    model_id = os.getenv("ODYSSEUS_GROUNDING_MODEL", "google/owlvit-base-patch32")
+    model_id = maven_env("MAVEN_AI_GROUNDING_MODEL", "google/owlvit-base-patch32")
     cached = _GROUNDING_STATE.get(model_id)
     if cached:
         return cached

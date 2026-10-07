@@ -4,10 +4,10 @@ import os
 import stat
 from collections.abc import Mapping
 
-from src.brand import BRAND_NAME
+from src.brand import BRAND_NAME, maven_env
 
 
-HOST_DOCKER_ENV_VAR = "ODYSSEUS_ENABLE_HOST_DOCKER"
+HOST_DOCKER_ENV_VAR = "MAVEN_AI_ENABLE_HOST_DOCKER"
 HOST_DOCKER_SOCKET_PATH = "/var/run/docker.sock"
 
 HOST_DOCKER_ACCESS_HINT = (
@@ -40,7 +40,7 @@ def host_docker_access_enabled(
     environ: Mapping[str, str] | None = None,
 ) -> bool:
     env = os.environ if environ is None else environ
-    if env.get(HOST_DOCKER_ENV_VAR, "").strip().lower() != "true":
+    if (maven_env(HOST_DOCKER_ENV_VAR, "", environ=env) or "").strip().lower() != "true":
         return False
     try:
         mode = os.stat(socket_path).st_mode

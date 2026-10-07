@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 from src.constants import TTS_CACHE_DIR
+from src.brand import maven_env
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class TTSService:
         self._kokoro = None  # lazy-init
         
         try:
-            self.max_cache_bytes = int(os.getenv("ODYSSEUS_TTS_CACHE_MAX_BYTES", 500 * 1024 * 1024))
+            self.max_cache_bytes = int(maven_env("MAVEN_AI_TTS_CACHE_MAX_BYTES", 500 * 1024 * 1024))
         except ValueError:
             self.max_cache_bytes = 500 * 1024 * 1024
 

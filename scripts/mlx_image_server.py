@@ -296,12 +296,12 @@ def _generate_boogu(model: str, prompt: str, out_path: Path, width: int, height:
         ) from e
 
     model_path = _snapshot_path(model)
-    vlm_model = (_args.vlm_model or os.environ.get("ODYSSEUS_MLX_IMAGE_VLM_MODEL") or "").strip()
+    vlm_model = (_args.vlm_model or os.environ.get("MAVEN_AI_MLX_IMAGE_VLM_MODEL") or os.environ.get("ODYSSEUS_MLX_IMAGE_VLM_MODEL") or "").strip()
     if not vlm_model:
         raise HTTPException(
             422,
             "This MLX image pipeline requires a companion vision-language model. "
-            "Relaunch with --vlm-model <repo_or_path> or set ODYSSEUS_MLX_IMAGE_VLM_MODEL.",
+            "Relaunch with --vlm-model <repo_or_path> or set MAVEN_AI_MLX_IMAGE_VLM_MODEL.",
         )
     try:
         pipe = BooguImagePipeline.from_pretrained(

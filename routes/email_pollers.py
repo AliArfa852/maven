@@ -31,6 +31,7 @@ from email.mime.multipart import MIMEMultipart
 
 from src.task_endpoint import resolve_task_candidates, task_llm_call_async
 
+from src.brand import maven_env
 from routes.email_helpers import (
     _strip_think, _extract_reply, _apply_email_style_mechanics, _load_settings, _save_settings, _get_email_config,
     _send_smtp_message,
@@ -1409,7 +1410,7 @@ def _scheduled_poll_once() -> dict:
                 # pollers can race here (the in-process asyncio task and an
                 # externally cron-driven `maven-mail poll-scheduled`, or
                 # an admin running the CLI manually alongside the in-process
-                # one despite the ODYSSEUS_INPROCESS_POLLERS=0 guidance) -
+                # one despite the MAVEN_AI_INPROCESS_POLLERS=0 guidance) -
                 # both can SELECT the same 'pending' row before either has
                 # updated its status. The UPDATE...WHERE status='pending' is
                 # the atomicity boundary: only the poller whose UPDATE
@@ -1514,13 +1515,13 @@ _poller_task = None
 _summarize_task = None
 
 def _inprocess_pollers_enabled() -> bool:
-    """Honour `ODYSSEUS_INPROCESS_POLLERS` — set to `0`/`false`/`no`/`off`
+    """Honour `MAVEN_AI_INPROCESS_POLLERS` — set to `0`/`false`/`no`/`off`
     to disable the asyncio tasks so a cron / systemd-timer setup driving
     `maven-mail poll-scheduled` is the sole external driver. The legacy
     auto-summary/reply poller no longer starts here; scheduled Tasks own that
     work so Email settings are only feature gates, not a second scheduler."""
     import os
-    raw = os.environ.get("ODYSSEUS_INPROCESS_POLLERS", "1").strip().lower()
+    raw = maven_env("MAVEN_AI_INPROCESS_POLLERS", "1").strip().lower()
     return raw not in ("0", "false", "no", "off", "")
 
 
@@ -1528,12 +1529,12 @@ def _start_poller():
     """Start background pollers. Called at module load; if no event loop is
     running yet (common at import time), defer via a first-request hook.
 
-    Skipped entirely when `ODYSSEUS_INPROCESS_POLLERS=0` — use that when
+    Skipped entirely when `MAVEN_AI_INPROCESS_POLLERS=0` — use that when
     you're driving polling from cron / systemd to avoid two copies of
     `_scheduled_poll_once` racing on the same SQLite."""
     if not _inprocess_pollers_enabled():
         logger.info(
-            "In-process email pollers disabled (ODYSSEUS_INPROCESS_POLLERS=0); "
+            "In-process email pollers disabled (MAVEN_AI_INPROCESS_POLLERS=0); "
             "drive `maven-mail poll-scheduled` externally."
         )
         return

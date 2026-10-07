@@ -39,3 +39,25 @@ def apply_env_aliases(environ=os.environ):
             continue
         environ[ENV_PREFIX + suffix] = winner
         environ[LEGACY_ENV_PREFIX + suffix] = winner
+
+
+def legacy_env_name(name):
+    """``MAVEN_AI_X`` -> ``ODYSSEUS_X``."""
+    if not name.startswith(ENV_PREFIX):
+        raise ValueError(f"expected a {ENV_PREFIX}* name, got {name!r}")
+    return LEGACY_ENV_PREFIX + name[len(ENV_PREFIX):]
+
+
+def maven_env(name, default=None, environ=None):
+    """Read a ``MAVEN_AI_*`` setting, falling back to its legacy ``ODYSSEUS_*`` name.
+
+    ``name`` is the full new name, so call sites stay greppable for it. The new
+    name wins whenever it is set, even to an empty string (D-0-3), which is the
+    same rule apply_env_aliases follows; this works whether or not that shim has
+    run yet, so it is safe in modules read before src.constants.
+    """
+    legacy = legacy_env_name(name)
+    env = os.environ if environ is None else environ
+    if name in env:
+        return env[name]
+    return env.get(legacy, default)

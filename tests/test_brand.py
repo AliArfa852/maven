@@ -103,3 +103,13 @@ def test_js_brand_parity():
     m = re.search(r"name\s*:\s*[\"']([^\"']+)[\"']", text)
     assert m, "brand.js declares no name"
     assert m.group(1) == BRAND_NAME
+
+
+def test_maven_env_prefers_new_name_and_falls_back_to_legacy():
+    assert brand.maven_env("MAVEN_AI_X", "d", environ={"MAVEN_AI_X": "new", "ODYSSEUS_X": "old"}) == "new"
+    assert brand.maven_env("MAVEN_AI_X", "d", environ={"ODYSSEUS_X": "old"}) == "old"
+    assert brand.maven_env("MAVEN_AI_X", "d", environ={}) == "d"
+    # Set-but-empty new name still wins (D-0-3), same as apply_env_aliases.
+    assert brand.maven_env("MAVEN_AI_X", "d", environ={"MAVEN_AI_X": "", "ODYSSEUS_X": "old"}) == ""
+    with pytest.raises(ValueError):
+        brand.maven_env("ODYSSEUS_X")

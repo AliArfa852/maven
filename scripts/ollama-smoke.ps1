@@ -17,7 +17,7 @@
     powershell -ExecutionPolicy Bypass -File .\scripts\ollama-smoke.ps1 `
       -AppUrl http://127.0.0.1:7000 -EndpointUrl http://host.docker.internal:11434/v1 -Password <pw>
 
-  The password defaults to $env:ODYSSEUS_ADMIN_PASSWORD. Exits non-zero on the
+  The password defaults to $env:MAVEN_AI_ADMIN_PASSWORD (legacy: ODYSSEUS_ADMIN_PASSWORD). Exits non-zero on the
   first failed check.
 #>
 param(
@@ -26,8 +26,8 @@ param(
     # URL Maven itself uses to reach Ollama (differs from -OllamaUrl in Docker).
     [string]$EndpointUrl = "",
     [string]$Model = "qwen3.5:2b",
-    [string]$User = $(if ($env:ODYSSEUS_ADMIN_USER) { $env:ODYSSEUS_ADMIN_USER } else { "admin" }),
-    [string]$Password = $env:ODYSSEUS_ADMIN_PASSWORD,
+    [string]$User = $(if ($env:MAVEN_AI_ADMIN_USER) { $env:MAVEN_AI_ADMIN_USER } elseif ($env:ODYSSEUS_ADMIN_USER) { $env:ODYSSEUS_ADMIN_USER } else { "admin" }),
+    [string]$Password = $(if ($env:MAVEN_AI_ADMIN_PASSWORD) { $env:MAVEN_AI_ADMIN_PASSWORD } else { $env:ODYSSEUS_ADMIN_PASSWORD }),
     [string]$Prompt = "Reply with exactly one word: pong",
     [int]$TimeoutSec = 180
 )
@@ -60,7 +60,7 @@ try {
 Pass "Maven healthy at $app"
 
 # 3. Login (session cookie kept in $web)
-if (-not $Password) { Fail "No admin password. Pass -Password or set ODYSSEUS_ADMIN_PASSWORD." }
+if (-not $Password) { Fail "No admin password. Pass -Password or set MAVEN_AI_ADMIN_PASSWORD." }
 $web = New-Object Microsoft.PowerShell.Commands.WebRequestSession
 $headers = @{ "X-Requested-With" = "XMLHttpRequest"; "Origin" = $app }
 try {

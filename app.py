@@ -71,6 +71,7 @@ from core.constants import (
     REQUEST_TIMEOUT, OPENAI_API_KEY, AUTH_FILE,
 )
 from core.database import SessionLocal, ApiToken
+from src.brand import maven_env
 from core.middleware import (
     SecurityHeadersMiddleware,
     get_application_route_path,
@@ -237,7 +238,7 @@ class _SlowRequestLogMiddleware(_BaseHTTPMiddleware):
         finally:
             elapsed = time.perf_counter() - start
             try:
-                threshold = float(os.getenv("ODYSSEUS_SLOW_REQUEST_LOG_SECONDS", "0.75") or "0.75")
+                threshold = float(maven_env("MAVEN_AI_SLOW_REQUEST_LOG_SECONDS", "0.75") or "0.75")
             except Exception:
                 threshold = 0.75
             if elapsed >= threshold:
@@ -1094,7 +1095,7 @@ async def _startup_event():
     # Startup warmups are opt-in. They make later requests a little warmer, but
     # they also compete with the first seconds of real UI use on slow or busy
     # machines. Default to clear/idle startup and let requests warm what they use.
-    _startup_warmups_enabled = str(os.getenv("ODYSSEUS_STARTUP_WARMUPS", "")).lower() in {"1", "true", "yes", "on"}
+    _startup_warmups_enabled = str(maven_env("MAVEN_AI_STARTUP_WARMUPS", "")).lower() in {"1", "true", "yes", "on"}
     if _startup_warmups_enabled:
         async def _warmup_tool_index():
             try:
@@ -1127,12 +1128,12 @@ async def _startup_event():
 
         _startup_tasks.append(asyncio.create_task(_warmup_endpoints()))
     else:
-        logger.info("Startup warmups disabled (set ODYSSEUS_STARTUP_WARMUPS=1 to enable)")
+        logger.info("Startup warmups disabled (set MAVEN_AI_STARTUP_WARMUPS=1 to enable)")
 
     # Keep-alive is opt-in. The ping path performs model discovery, and when
     # stale LAN endpoints are configured it can add periodic backend pressure
     # that delays unrelated UI requests such as Notes/Documents.
-    _keepalive_enabled = str(os.getenv("ODYSSEUS_MODEL_KEEPALIVE", "")).lower() in {"1", "true", "yes", "on"}
+    _keepalive_enabled = str(maven_env("MAVEN_AI_MODEL_KEEPALIVE", "")).lower() in {"1", "true", "yes", "on"}
     if _keepalive_enabled:
         async def _keepalive_loop():
             while True:
@@ -1216,13 +1217,13 @@ async def _startup_event():
 
     # Start scheduled task runner — skip when running under a cron-driven
     # deployment where an external worker drives task firing. Mirrors
-    # `ODYSSEUS_INPROCESS_POLLERS` from the email pollers.
-    _tasks_inprocess = os.environ.get("ODYSSEUS_INPROCESS_TASKS", "1").strip().lower()
+    # `MAVEN_AI_INPROCESS_POLLERS` from the email pollers.
+    _tasks_inprocess = maven_env("MAVEN_AI_INPROCESS_TASKS", "1").strip().lower()
     if _tasks_inprocess not in ("0", "false", "no", "off", ""):
         await task_scheduler.start()
     else:
         logger.info(
-            "In-process task scheduler disabled (ODYSSEUS_INPROCESS_TASKS=0); "
+            "In-process task scheduler disabled (MAVEN_AI_INPROCESS_TASKS=0); "
             "drive task firing externally (e.g. cron)."
         )
     # Periodic null-owner sweep — re-runs the legacy-owner assignment hourly

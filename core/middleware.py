@@ -11,13 +11,14 @@ from starlette.responses import Response
 from starlette.routing import get_route_path
 
 from src.owner_identity import INTERNAL_TOOL_USER, auth_disabled
+from src.brand import maven_env
 
 
 # Per-process token that lets the in-app tool layer hit admin-gated
 # routes via HTTP loopback (the agent's tool calls don't carry the
 # admin user's session cookie). Set once at import; tools read the
 # same value from this module. Never persisted or exposed externally.
-INTERNAL_TOOL_TOKEN = os.environ.get("ODYSSEUS_INTERNAL_TOKEN") or secrets.token_hex(32)
+INTERNAL_TOOL_TOKEN = maven_env("MAVEN_AI_INTERNAL_TOKEN") or secrets.token_hex(32)
 INTERNAL_TOOL_HEADER = "X-Odysseus-Internal-Token"
 
 
