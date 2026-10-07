@@ -20,6 +20,7 @@ EXCLUDED_PREFIXES = (
     "specs/", ".github/", "website/", "assets/", "swift/", "integrations/",
     "licenses/", "config/",
     "companion/",  # human-owned optional band
+    ".claude/",  # fleet tooling and its decision records, not product text
 )
 EXCLUDED_FILES = {
     "LICENSE", "SECURITY.md", "THREAT_MODEL.md", "ROADMAP.md", "Odysseus.spec",

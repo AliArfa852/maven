@@ -1,12 +1,12 @@
 #Requires -Version 5.1
 <#
-  End-to-end smoke test: Ollama -> Odysseus -> one real chat reply.
+  End-to-end smoke test: Ollama -> Maven -> one real chat reply.
 
   Checks, in order:
     1. Ollama answers on -OllamaUrl and has -Model pulled
-    2. Odysseus /api/health responds
+    2. Maven /api/health responds
     3. Admin login works
-    4. The Ollama endpoint is registered in Odysseus (created if missing) and
+    4. The Ollama endpoint is registered in Maven (created if missing) and
        lists -Model
     5. A chat session on that model returns a non-empty reply via /api/chat
 
@@ -23,7 +23,7 @@
 param(
     [string]$AppUrl = "http://127.0.0.1:7000",
     [string]$OllamaUrl = "http://localhost:11434",
-    # URL Odysseus itself uses to reach Ollama (differs from -OllamaUrl in Docker).
+    # URL Maven itself uses to reach Ollama (differs from -OllamaUrl in Docker).
     [string]$EndpointUrl = "",
     [string]$Model = "qwen3.5:2b",
     [string]$User = $(if ($env:ODYSSEUS_ADMIN_USER) { $env:ODYSSEUS_ADMIN_USER } else { "admin" }),
@@ -55,9 +55,9 @@ $app = $AppUrl.TrimEnd('/')
 try {
     Invoke-RestMethod -TimeoutSec 10 "$app/api/health" | Out-Null
 } catch {
-    Fail "Odysseus not reachable at $app/api/health ($($_.Exception.Message))"
+    Fail "Maven not reachable at $app/api/health ($($_.Exception.Message))"
 }
-Pass "Odysseus healthy at $app"
+Pass "Maven healthy at $app"
 
 # 3. Login (session cookie kept in $web)
 if (-not $Password) { Fail "No admin password. Pass -Password or set ODYSSEUS_ADMIN_PASSWORD." }
