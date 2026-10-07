@@ -14,8 +14,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 # Human-owned paths: the fleet may not edit these, so they are not scanned.
-# NOTE .env.example is a KNOWN GAP (decision D-1c-5): agents are denied access
-# to it by .claude/settings.json, so its ODYSSEUS_* names cannot be reviewed here.
 EXCLUDED_PREFIXES = (
     "specs/", ".github/", "website/", "assets/", "swift/", "integrations/",
     "licenses/", "config/",
@@ -27,7 +25,6 @@ EXCLUDED_FILES = {
     "odysseus-ui.service", "setup.py", "build-macos-app.sh",
     "build-windows-portable.ps1", "start-macos.sh", "launch-windows.ps1",
     "update_windows.bat", "install-service.sh",
-    ".env.example",  # KNOWN GAP D-1c-5 (blocked for agents)
 }
 
 _I = re.IGNORECASE

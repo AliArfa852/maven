@@ -26,11 +26,11 @@
 ```bash
 git clone https://github.com/AliArfa852/maven.git
 cd maven
-cp docker/local.env.example .env      # Windows: copy docker\local.env.example .env
+cp .env.example .env      # Windows: copy .env.example .env
 docker compose up -d --build
 ```
 
-Open `http://localhost:7000` when the containers are healthy and log in as `admin` / `maven-local-test` (set in `.env`; local testing only, so change it before anyone else can reach the app). If you leave `MAVEN_AI_ADMIN_PASSWORD` empty, a random password is printed once in `docker logs maven`. For every setting, see `.env.example`.
+Open `http://localhost:7000` when the containers are healthy and log in as `admin`. The password is printed once in `docker logs maven`; to choose it yourself, set `MAVEN_AI_ADMIN_PASSWORD` in `.env` before the first start. `.env.example` runs as-is for local testing and documents every other setting.
 
 The app container is named `maven` (`docker logs maven`, `docker exec -it maven sh`) and the compose service is `maven` (`docker compose logs maven`).
 

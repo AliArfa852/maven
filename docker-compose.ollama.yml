@@ -2,7 +2,7 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d --build
 #
-# - Builds THIS checkout (the base file would otherwise pull the upstream
+# - Builds THIS checkout (the base file would otherwise pull the published
 #   ghcr.io image and only build when that pull fails).
 # - Uses separate data/log dirs so the container never chowns or shares the
 #   native ./data SQLite database.
@@ -12,7 +12,7 @@
 #   .\scripts\ollama-smoke.ps1 -AppUrl http://127.0.0.1:7000 `
 #     -EndpointUrl http://host.docker.internal:11434/v1 -Password <admin pw>
 services:
-  odysseus:
+  maven:
     image: maven:local
     pull_policy: build
     volumes: !override
