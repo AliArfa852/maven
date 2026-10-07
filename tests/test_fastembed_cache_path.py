@@ -67,3 +67,26 @@ def test_explicit_fastembed_cache_path_is_respected(monkeypatch):
         assert mod.FASTEMBED_CACHE_DIR == custom
     finally:
         _restore(monkeypatch)
+
+
+def test_onedrive_data_dir_moves_cache_to_localappdata_on_windows():
+    from src.runtime_paths import default_fastembed_cache_dir, is_inside_onedrive
+
+    env = {"OneDrive": r"C:\Users\ali\OneDrive", "LOCALAPPDATA": r"C:\Users\ali\AppData\Local"}
+    data = r"C:\Users\ali\OneDrive\Documents\projects\maven\data"
+    assert is_inside_onedrive(data, env) is True
+    assert default_fastembed_cache_dir(data, env, os_name="nt") == os.path.join(
+        r"C:\Users\ali\AppData\Local", "maven", "fastembed_cache")
+    # No OneDrive env var exported: the path component still gives it away.
+    assert is_inside_onedrive(r"D:\OneDrive - Contoso\maven\data", {}) is True
+
+
+def test_cache_stays_in_data_dir_outside_onedrive_or_off_windows():
+    from src.runtime_paths import default_fastembed_cache_dir, is_inside_onedrive
+
+    env = {"OneDrive": r"C:\Users\ali\OneDrive", "LOCALAPPDATA": r"C:\Users\ali\AppData\Local"}
+    local = r"C:\work\maven\data"
+    assert is_inside_onedrive(local, env) is False
+    assert default_fastembed_cache_dir(local, env, os_name="nt") == os.path.join(local, "fastembed_cache")
+    onedrive = r"C:\Users\ali\OneDrive\maven\data"
+    assert default_fastembed_cache_dir(onedrive, env, os_name="posix") == os.path.join(onedrive, "fastembed_cache")

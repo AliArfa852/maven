@@ -261,6 +261,23 @@ from routes.auth_routes import setup_auth_routes, SESSION_COOKIE
 auth_manager = AuthManager()
 app.state.auth_manager = auth_manager
 AUTH_ENABLED = not auth_disabled()
+if AUTH_ENABLED:
+    # Say how to get in: a fresh install has no password to look up, and an
+    # existing one only printed its temporary password once, at setup.
+    if not auth_manager.is_configured:
+        logger.warning("No accounts yet: open /login in the browser to create the admin account.")
+    else:
+        logger.info(
+            "Login: use your admin account. Forgot the password? Run "
+            "`python scripts/maven-users reset-password <username> --generate` on this server."
+        )
+from src.runtime_paths import is_inside_onedrive as _is_inside_onedrive
+if os.name == "nt" and _is_inside_onedrive(DATA_DIR):
+    logger.warning(
+        "The data folder %s is inside OneDrive. Syncing a live database can corrupt it; "
+        "move the app out of OneDrive or set MAVEN_AI_DATA_DIR to a local folder.",
+        DATA_DIR,
+    )
 LOCALHOST_BYPASS = os.getenv("LOCALHOST_BYPASS", "false").lower() == "true"
 if LOCALHOST_BYPASS:
     logger.warning("LOCALHOST_BYPASS is enabled, loopback requests bypass authentication. Do not expose this instance to a network.")
