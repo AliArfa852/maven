@@ -1,0 +1,27 @@
+# Ollama overlay: run this fork in Docker against Ollama on the host.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d --build
+#
+# - Builds THIS checkout (the base file would otherwise pull the upstream
+#   ghcr.io image and only build when that pull fails).
+# - Uses separate data/log dirs so the container never chowns or shares the
+#   native ./data SQLite database.
+# - Points chat discovery and embeddings at host Ollama.
+#
+# Verify with:
+#   .\scripts\ollama-smoke.ps1 -AppUrl http://127.0.0.1:7000 `
+#     -EndpointUrl http://host.docker.internal:11434/v1 -Password <admin pw>
+services:
+  odysseus:
+    image: maven:local
+    pull_policy: build
+    volumes: !override
+      - ${APP_DATA_DIR:-./data-docker}:/app/data:z
+      - ${APP_LOGS_DIR:-./logs-docker}:/app/logs:z
+      - ${APP_DATA_DIR:-./data-docker}/ssh:/app/.ssh:z
+      - ${APP_DATA_DIR:-./data-docker}/huggingface:/app/.cache/huggingface:z
+      - ${APP_DATA_DIR:-./data-docker}/local:/app/.local:z
+    environment:
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - EMBEDDING_URL=${EMBEDDING_URL:-http://host.docker.internal:11434/v1/embeddings}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
