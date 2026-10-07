@@ -70,6 +70,20 @@ Interpretation, binding for Phase 2:
 
 ## Pending
 
+### D-2-1 … D-2-7  Plan v2 decisions (main loop, 2026-10-07)
+kind: product decisions. See MAVEN_PLAN.md v2. None blocks Phase 0 or 1; D-2-1 and D-2-2 must be answered before Phase 2 opens.
+- **D-2-1 Corporate database.** A) Make PostgreSQL the corporate default; SQLite stays for single-user (recommended: concurrency, row-level security, pgvector). B) SQLite only.
+- **D-2-2 Default clearance per role.** A) The table in plan §3.2, where Admin gets Internal clearance (separation of duties) and a Compliance Officer role is added (recommended). B) Admin sees everything, with no Compliance role.
+- **D-2-3 PII/DLP engine.** A) Presidio + rules + small local NER, after the license is verified (recommended). B) Rules only.
+- **D-2-4 Graph engine inside `graph_service/`.** A) PostgreSQL + Apache AGE + pgvector (recommended, pending verification). B) Neo4j Community. C) Decide after a spike that compares both on a pilot corpus.
+- **D-2-5 Sheets editing.** A) The vendored SheetJS viewer/editor now; OnlyOffice/Collabora integration later (recommended). B) Integrate OnlyOffice/Collabora now.
+- **D-2-6 Analysis runtime.** A) A no-network container sandbox, with Pyodide for small jobs (recommended). B) Pyodide only.
+- **D-2-7 Business model under AGPL.** Counsel reviews: subscriptions for support and updates, installation, SLA, appliances. No proprietary add-ons linked into Maven.
+if no answer: Phase 2 does not open.
+
+### D-1c-6 status (2026-10-07)
+Option A applied on `claude/bold-lovelace-pppvnh`: SECURITY.md L3/13/15/22/24 and THREAT_MODEL.md L3/7 now say Maven. `odysseus.db` (SECURITY.md L32) and `X-Odysseus-Internal-Token` are real names and were left unchanged. website/, specs/, .github/ and ROADMAP.md are still pending.
+
 ### D-1c-7  Fine-tuned model prompts still say "Odysseus" (S-1, agent-core)
 context: The LoRA minimal prompts in src/agent_loop.py (~1770-1915) keep "Odysseus" ("Use Odysseus tool-call format"), because the `odysseus-qwen3` fine-tunes were trained on exactly that text. Changing it likely degrades those models.
 options: A) keep them (recommended); only users running those specific fine-tunes see the old name. B) rebrand anyway, which is mechanical, and accept the quality risk for those models.
