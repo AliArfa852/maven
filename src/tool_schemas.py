@@ -805,6 +805,24 @@ FUNCTION_TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "create_file",
+            "description": "Create a downloadable file for the user: Excel (xlsx), Word (docx), PowerPoint (pptx), PDF or CSV. Returns a link. Use when the user asks for a file in one of these formats (not for editor documents). Spreadsheets/CSV: spec.sheets=[{name, rows}] or spec.rows; the first row is the header. Word/PDF: spec.title + spec.blocks=[{type: heading|paragraph|bullets|table, text|items|rows}]. PowerPoint: spec.title + spec.slides=[{title, bullets} or {title, table}]. Use only real data from the conversation or tools; never invent figures.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "format": {"type": "string", "enum": ["xlsx", "docx", "pptx", "pdf", "csv"],
+                               "description": "File type to create"},
+                    "filename": {"type": "string", "description": "File name without extension"},
+                    "spec": {"type": "object",
+                             "description": "Content: {title, blocks} for docx/pdf, {sheets} or {rows} for xlsx/csv, {title, slides} for pptx"}
+                },
+                "required": ["format", "spec"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "manage_documents",
             "description": "Manage documents: list all documents (with optional search/language filter), delete documents, or run tidy cleanup.",
             "parameters": {

@@ -141,6 +141,7 @@ _register(
 _register(
     {
         "create_document",
+        "create_file",
         "manage_calendar",
         "manage_contact",
         "manage_documents",

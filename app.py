@@ -710,6 +710,10 @@ app.include_router(setup_session_routes(
     upload_handler=upload_handler,
 ))
 
+# Office file creation: xlsx / docx / pptx / pdf / csv into the caller's uploads
+from routes.file_routes import setup_file_routes
+app.include_router(setup_file_routes())
+
 # Flagged-conversation review (Compliance Officers; Admin console)
 from routes.compliance_routes import setup_compliance_routes
 app.include_router(setup_compliance_routes())

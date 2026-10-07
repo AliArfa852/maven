@@ -528,7 +528,7 @@ _DOMAIN_RULES = {
 
 _DOMAIN_TOOL_MAP = {
     "web": set(WEB_TOOL_NAMES),
-    "documents": {"create_document", "edit_document", "update_document", "suggest_document", "manage_documents"},
+    "documents": {"create_document", "edit_document", "update_document", "suggest_document", "manage_documents", "create_file"},
     "email": {"list_email_accounts", "list_emails", "read_email", "scan_email_unsubscribes", "unsubscribe_email", "send_email", "reply_to_email", "bulk_email", "archive_email", "delete_email", "mark_email_read", "resolve_contact", "manage_contact"},
     "cookbook": {"download_model", "serve_model", "serve_preset", "list_serve_presets", "list_served_models", "stop_served_model", "tail_serve_output", "list_downloads", "cancel_download", "search_hf_models", "list_cached_models", "list_cookbook_servers", "adopt_served_model"},
     "notes_calendar_tasks": {"manage_notes", "manage_calendar", "manage_tasks"},
@@ -642,6 +642,12 @@ Maintain a structured task list for multi-step coding work. Use it when the task
 ```get_workspace
 ```
 Return the absolute path of the active workspace folder. File tools are CONFINED to it (paths can be RELATIVE to it); the shell starts there (cwd) but is NOT sandboxed. Call this first when the user says "the project"/"the code"/"this folder" without a path, instead of asking them. No arguments.""",
+
+    "create_file": """\
+```create_file
+{"format": "xlsx", "filename": "Q3 sales", "spec": {"sheets": [{"name": "Sales", "rows": [["Region", "Revenue"], ["North", 120]]}]}}
+```
+Create a downloadable Excel (xlsx), Word (docx), PowerPoint (pptx), PDF or CSV file and give the user its link. Use when the user asks for a file in one of those formats, not for editor documents. spec: spreadsheets/CSV use "sheets" (or "rows"; first row = header); docx/pdf use "title" + "blocks" ([{"type": "heading"|"paragraph"|"bullets"|"table", "text"/"items"/"rows"}]); pptx uses "slides" ([{"title", "bullets"} or {"title", "table"}]). Put only real data in it; never invent figures.""",
 
     "create_document": """\
 ```create_document

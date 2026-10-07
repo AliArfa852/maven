@@ -127,6 +127,11 @@ Core (`requirements.txt`) and optional (`requirements-optional.txt`):
 | pyotp | MIT |
 | qrcode\[pil] | BSD-3-Clause |
 | croniter | MIT |
+| openpyxl (+ et-xmlfile) — Excel file creation | MIT |
+| python-docx — Word file creation | MIT |
+| python-pptx (+ XlsxWriter) — PowerPoint file creation | MIT (BSD-2-Clause) |
+| reportlab — PDF file creation | BSD-3-Clause |
+| psycopg2-binary — PostgreSQL driver | LGPL-3.0-or-later (with exceptions; dynamically linked) |
 | pytest / pytest-asyncio | MIT / Apache-2.0 |
 | duckduckgo-search (optional) | MIT |
 | markitdown (optional — Office/EPUB text extraction) | MIT |
