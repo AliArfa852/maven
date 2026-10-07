@@ -141,6 +141,24 @@ def excerpt(text: str, finding: Finding) -> str:
     return ("…" if start else "") + _mask(snippet) + ("…" if end < len(text) else "")
 
 
+DEFAULT_MONITORING_NOTICE = (
+    "Messages you send may be checked automatically for security and policy "
+    "risks, such as pasted passwords or requests for other people's data. "
+    "Matches are reviewed by your organisation's compliance team."
+)
+
+
+def monitoring_notice() -> str:
+    """Notice shown to employees when flagging is on ("" when it is off).
+
+    Telling people their use is monitored is a legal requirement in many
+    places. Companies can word it themselves with MAVEN_AI_MONITORING_NOTICE.
+    """
+    if not flagging_enabled():
+        return ""
+    return (maven_env("MAVEN_AI_MONITORING_NOTICE", "") or "").strip() or DEFAULT_MONITORING_NOTICE
+
+
 def flagging_enabled() -> bool:
     return (maven_env("MAVEN_AI_FLAGGING", "1") or "1").strip().lower() not in {"0", "false", "no", "off"}
 

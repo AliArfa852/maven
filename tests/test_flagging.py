@@ -162,3 +162,21 @@ def test_bad_decision_and_unknown_flag(flag_id):
     with pytest.raises(HTTPException) as exc:
         decide(flag_id="nope", body=FlagDecision(decision="dismiss"), request=req)
     assert exc.value.status_code == 404
+
+
+def test_monitoring_notice_follows_flagging_and_can_be_reworded(monkeypatch):
+    monkeypatch.delenv("MAVEN_AI_FLAGGING", raising=False)
+    monkeypatch.delenv("MAVEN_AI_MONITORING_NOTICE", raising=False)
+    assert flagging.monitoring_notice() == flagging.DEFAULT_MONITORING_NOTICE
+    monkeypatch.setenv("MAVEN_AI_MONITORING_NOTICE", "Chats are reviewed per policy HR-12.")
+    assert flagging.monitoring_notice() == "Chats are reviewed per policy HR-12."
+    monkeypatch.setenv("MAVEN_AI_FLAGGING", "0")
+    assert flagging.monitoring_notice() == ""
+
+
+def test_login_policy_carries_the_notice(tmp_path, monkeypatch):
+    from tests.test_set_admin import _fresh_auth_manager
+
+    monkeypatch.delenv("MAVEN_AI_FLAGGING", raising=False)
+    _, mgr = _fresh_auth_manager(tmp_path)
+    assert mgr.policy()["monitoring_notice"] == flagging.monitoring_notice()

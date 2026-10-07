@@ -200,6 +200,7 @@
   button:disabled { opacity: 0.5; cursor: not-allowed; }
   .error { color: #e55; font-size: 0.85rem; margin-bottom: 0.75rem; display: none; }
   .toggle { text-align: center; margin-top: calc(1rem + 4px); font-size: 0.85rem; color: color-mix(in srgb, var(--fg) 50%, transparent); }
+  .monitoring-notice { margin-top: 1rem; font-size: 0.75rem; line-height: 1.4; text-align: center; color: color-mix(in srgb, var(--fg) 55%, transparent); }
   .toggle a { color: var(--red); cursor: pointer; text-decoration: none; }
   .toggle a:hover { text-decoration: underline; }
   .pw-wrapper { position: relative; margin-bottom: 1rem; }
@@ -309,6 +310,8 @@
     <button type="submit" id="submitBtn">Sign In</button>
   </form>
 
+  <p id="monitoringNotice" class="monitoring-notice" hidden></p>
+
   <div class="toggle" id="toggleArea" style="display:none">
     <span id="toggleText">Don't have an account? </span>
     <a id="toggleLink" href="#">Sign up</a>
@@ -400,6 +403,11 @@
     const policyRes = await policyPromise;
     if (policyRes && policyRes.ok) {
       policy = await policyRes.json();
+      const noticeEl = document.getElementById('monitoringNotice');
+      if (noticeEl && policy.monitoring_notice) {
+        noticeEl.textContent = policy.monitoring_notice;
+        noticeEl.hidden = false;
+      }
     }
   } catch (e) {
     setMode('login');

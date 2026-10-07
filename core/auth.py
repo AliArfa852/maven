@@ -89,6 +89,14 @@ class SetAdminResult(enum.Enum):
     LAST_ADMIN = "last_admin"           # would remove the last remaining admin
 
 
+def _monitoring_notice() -> str:
+    try:
+        from src.flagging import monitoring_notice
+        return monitoring_notice()
+    except Exception:
+        return ""
+
+
 class AccessChangeResult(enum.Enum):
     """Outcome of AuthManager.set_roles / set_clearance."""
     OK = "ok"
@@ -257,6 +265,7 @@ class AuthManager:
             "reserved_usernames": sorted(RESERVED_USERNAMES),
             "signup_enabled": self.signup_enabled,
             "session_days": TOKEN_TTL // 86400,
+            "monitoring_notice": _monitoring_notice(),
         }
 
     # ------------------------------------------------------------------

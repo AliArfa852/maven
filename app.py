@@ -289,6 +289,7 @@ if AUTH_ENABLED:
         "/api/auth/login",
         "/api/auth/logout",
         "/api/auth/status",
+        "/api/auth/policy",  # password rules + monitoring notice the login page shows
         "/api/auth/features",
         "/api/auth/settings",
         "/api/auth/integrations/presets",
