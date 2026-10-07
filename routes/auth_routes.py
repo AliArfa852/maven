@@ -12,7 +12,8 @@ import re
 from pathlib import Path
 
 from core.atomic_io import atomic_write_json, atomic_write_text
-from core.auth import AuthManager, RESERVED_USERNAMES, SetAdminResult, TOKEN_TTL
+from core.auth import AccessChangeResult, AuthManager, RESERVED_USERNAMES, SetAdminResult, TOKEN_TTL
+from src import access
 from src.brand import BRAND_NAME
 from src.constants import DEEP_RESEARCH_DIR, MEMORY_FILE, PASSWORD_MIN_LENGTH, SKILLS_DIR
 from src.rate_limiter import RateLimiter
@@ -79,6 +80,30 @@ class RenameUserRequest(BaseModel):
 
 class SetAdminRequest(BaseModel):
     is_admin: bool
+
+
+class SetRolesRequest(BaseModel):
+    roles: list[str]
+
+
+class SetClearanceRequest(BaseModel):
+    # None clears the override, so the user's roles decide their clearance.
+    clearance: Optional[str] = None
+
+
+# Keyed by value so a reloaded core.auth (tests) maps the same way.
+_ACCESS_CHANGE_ERRORS = {
+    AccessChangeResult.USER_NOT_FOUND.value: (404, "User not found"),
+    AccessChangeResult.NOT_AUTHORIZED.value: (403, "Admin only"),
+    AccessChangeResult.LAST_ADMIN.value: (400, "Cannot remove the last admin"),
+    AccessChangeResult.INVALID.value: (400, "Unknown role or clearance"),
+}
+
+
+def _raise_on_access_refusal(result) -> None:
+    error = _ACCESS_CHANGE_ERRORS.get(getattr(result, "value", result))
+    if error:
+        raise HTTPException(*error)
 
 
 class SetOpenRegistrationRequest(BaseModel):
@@ -216,6 +241,7 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
             u = result.get("username")
             if u:
                 result["privileges"] = auth_manager.get_privileges(u)
+                result.update(auth_manager.access_summary(u))
         except Exception:
             pass
         return result
@@ -301,10 +327,52 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
     # Admin-only routes
     @router.get("/users")
     async def list_users(request: Request):
+        # Read-only: anyone who may view the admin console (Admin, Manager,
+        # General Manager, Compliance Officer). Every change below stays Admin only.
+        user = _get_current_user(request)
+        if not user or not auth_manager.has_capability(user, access.ADMIN_VIEW):
+            raise HTTPException(403, "Not permitted")
+        return {"users": auth_manager.list_users()}
+
+    @router.get("/roles")
+    async def list_roles(request: Request):
+        """The role catalogue: labels, default clearance and capabilities."""
+        user = _get_current_user(request)
+        if not user or not auth_manager.has_capability(user, access.ADMIN_VIEW):
+            raise HTTPException(403, "Not permitted")
+        return {
+            "roles": [
+                {
+                    "id": r,
+                    "label": access.ROLE_LABELS[r],
+                    "default_clearance": access.ROLE_DEFAULT_CLEARANCE[r],
+                    "capabilities": sorted(access.ROLE_CAPABILITIES[r]),
+                }
+                for r in access.ROLES
+            ],
+            "clearances": list(access.CLEARANCES),
+        }
+
+    @router.put("/users/{username}/roles")
+    async def set_user_roles(username: str, body: SetRolesRequest, request: Request):
+        """Replace a user's roles. Admin only. Basic is always held."""
         user = _get_current_user(request)
         if not user or not auth_manager.is_admin(user):
             raise HTTPException(403, "Admin only")
-        return {"users": auth_manager.list_users()}
+        result = auth_manager.set_roles(username, body.roles, user)
+        _raise_on_access_refusal(result)
+        target = (username or "").strip().lower()
+        return {"ok": True, "self": target == user, **auth_manager.access_summary(target)}
+
+    @router.put("/users/{username}/clearance")
+    async def set_user_clearance(username: str, body: SetClearanceRequest, request: Request):
+        """Override a user's clearance, or reset it to their roles' default. Admin only."""
+        user = _get_current_user(request)
+        if not user or not auth_manager.is_admin(user):
+            raise HTTPException(403, "Admin only")
+        result = auth_manager.set_clearance(username, body.clearance, user)
+        _raise_on_access_refusal(result)
+        return {"ok": True, **auth_manager.access_summary((username or "").strip().lower())}
 
     @router.post("/users")
     async def admin_create_user(body: CreateUserRequest, request: Request):

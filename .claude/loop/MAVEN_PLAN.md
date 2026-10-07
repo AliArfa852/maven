@@ -36,6 +36,7 @@ v1 requirements R1–R11 still stand. R12–R20 were added on 2026-10-07.
 | **R18** | **No data leakage:** email, contracts, financials and other sensitive data never leave through the model, tools, exports or other users | 2 onward |
 | **R19** | **Conversation flagging:** inappropriate use is flagged for review | 2 (rules), 6 (classifier) |
 | **R20** | **Sellable to corporations:** installer, SSO, updates, backups, compliance documents, support | 7 |
+| **R21** | **Admin Console** with view-only access for Managers, duty-only access for Compliance Officers, full access for Admins; several roles per user; a default admin account | 2 (started) |
 
 ---
 
@@ -47,7 +48,7 @@ v1 requirements R1–R11 still stand. R12–R20 were added on 2026-10-07.
 4. **Sessions carry a sensitivity level ("taint tracking").** A session takes the highest label of anything it has read. That level then gates outbound tools, exports and sharing (§3.4). This one mechanism covers most leak paths.
 5. **Separation of duties.** An admin runs the system but does not automatically read everyone's content. Flag review belongs to a separate Compliance role. Using emergency "break-glass" access is itself audited.
 6. **Data analysis runs in a sandbox, not with the admin-only Python tool.** D-0-2 keeps shell and Python tools admin-only and unsandboxed. Analysis for every employee therefore needs its own locked runtime (§5.2).
-7. **Proposed: PostgreSQL as the corporate database** (SQLite stays for single-user installs). It handles many concurrent users, and row-level security gives a second, database-level permission check. It can also hold vectors (pgvector) and possibly the graph (Apache AGE), so there is one store to back up. **[DECIDE D-2-1]**
+7. **PostgreSQL is the corporate database** (decided, D-2-1). SQLite stays for single-user installs. Postgres handles many concurrent users, and row-level security gives a second, database-level permission check. It can also hold vectors (pgvector) and possibly the graph (Apache AGE), so there is one store to back up.
 
 ---
 
@@ -81,7 +82,21 @@ A user can see an item only when **all three** allow it: role permits the featur
 | Shell / Python / file tools on the host (D-0-2) | – | – | – | – | – | ✓ (audited) |
 | Read other users' content | – | – | – | – | flagged excerpts only | break-glass only, audited and notified |
 
-**Default clearance:** Basic = Internal, Advanced = Internal, Manager = Confidential, General Manager = Restricted, Compliance = Restricted (flag excerpts only), Admin = Internal (separation of duties). Each is configurable per user. **[DECIDE D-2-2]**
+**Default clearance (decided, D-2-2):** Basic = Internal, Advanced = Internal, Manager = Confidential, General Manager = Restricted, Compliance = Restricted (flag excerpts only), Admin = Internal (separation of duties). A new user gets the default for their roles unless an Admin sets an override.
+
+**Several roles per user (decided, D-2-8):** capabilities are the union of the user's roles, and clearance is the highest default among them unless overridden. Every user holds Basic.
+
+**Admin Console (decided, D-2-8):** one page for monitoring, decisions and changes.
+- **Admin:** full access; changes users, roles, clearance and settings.
+- **Manager / General Manager:** can open it and see everything on it, but **change nothing**.
+- **Compliance Officer:** can open it and see it, and can carry out **only compliance duties** (the flag review queue); nothing else.
+- **Basic / Advanced:** no access.
+- The server enforces every read and change; the page only hides what a user may not do.
+- **Default admin account:** the first-run setup creates an admin (`MAVEN_AI_ADMIN_USER` / `MAVEN_AI_ADMIN_PASSWORD`, or a generated password printed once). The last admin can never be removed.
+
+**Built (2026-10-07, branch `claude/bold-lovelace-pppvnh`):** `src/access.py` (roles, clearance, capabilities); roles and clearance stored per user in `core/auth.py`, with Admin still driven by `is_admin` so every existing admin gate is unchanged; `require_capability` in `core/middleware.py`; `GET /api/auth/users` and `GET /api/auth/roles` for console viewers; `PUT /api/auth/users/{u}/roles` and `/clearance` for Admins; the `/admin-console` page, linked from Settings → Account; `tests/test_access_roles.py`.
+
+**Next for the console:** the flag review queue (with flagging, §6); audit-log and usage views; read-only views of the existing admin settings for Managers, after each one is checked for secrets it might show.
 
 ### 3.3 Labels on data
 
@@ -109,7 +124,8 @@ Web fetches are checked for data carried in the URL or query string. Model answe
 
 ### 3.6 Identity
 
-- Move users from `data/auth.json` (today: `is_admin` plus a privilege dict) into database tables: `users`, `teams`, `departments`, `roles`, `role_capabilities`, `grants`. Migrate existing users in place: admin → Admin, everyone else → Basic.
+- Roles and clearance live in `data/auth.json` for now (built). Phase 2 moves users into database tables (`users`, `teams`, `departments`, `user_roles`, `grants`), in Postgres for corporate installs, migrating existing users in place.
+- **PostgreSQL rollout (D-2-1):** add a `postgres` service to the compose files (internal network only, a volume, a generated password); set `DATABASE_URL` for corporate installs; run the full test suite against Postgres in CI; move `app.db` data with a one-time migration tool; include Postgres in backup and restore.
 - SSO through OIDC (Entra ID, Okta, Keycloak) and SAML. Map directory groups to roles, teams and clearance. SCIM provisioning in Phase 7.
 - A "permission matrix" test, generated from the route table, checks every endpoint × role and fails CI if a new endpoint has no policy.
 

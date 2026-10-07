@@ -941,6 +941,12 @@ async def serve_tasks(request: Request):
 async def serve_library(request: Request):
     return await serve_index(request)
 
+@app.get("/admin-console")
+async def serve_admin_console(request: Request):
+    """Admin console page. Login is enforced by the auth middleware; what each
+    user may see or change is enforced per API call (src/access.py)."""
+    return serve_html_with_nonce(request, abs_join(BASE_DIR, "static/admin-console.html"))
+
 @app.get("/backgrounds")
 async def serve_backgrounds(request: Request):
     """Sandbox page for prototyping background effects. No auth required."""

@@ -47,6 +47,7 @@ ADMIN_PRIVILEGES["allowed_models_restricted"] = False
 # backwards for this sentinel.
 ADMIN_PRIVILEGES["block_all_models"] = False
 
+from src import access
 from src.brand import BRAND_NAME
 from src.constants import AUTH_FILE, PASSWORD_MIN_LENGTH
 from src.owner_identity import RESERVED_AUTH_USERNAMES
@@ -86,6 +87,15 @@ class SetAdminResult(enum.Enum):
     USER_NOT_FOUND = "user_not_found"
     NOT_AUTHORIZED = "not_authorized"   # requester is not an admin
     LAST_ADMIN = "last_admin"           # would remove the last remaining admin
+
+
+class AccessChangeResult(enum.Enum):
+    """Outcome of AuthManager.set_roles / set_clearance."""
+    OK = "ok"
+    USER_NOT_FOUND = "user_not_found"
+    NOT_AUTHORIZED = "not_authorized"   # requester is not an admin
+    LAST_ADMIN = "last_admin"           # would remove the last remaining admin
+    INVALID = "invalid"                 # unknown role or clearance value
 
 
 class AuthManager:
@@ -372,9 +382,90 @@ class AuthManager:
 
     def list_users(self) -> List[Dict[str, Any]]:
         return [
-            {"username": u, "is_admin": d.get("is_admin", False), "privileges": self.get_privileges(u)}
+            {"username": u, "is_admin": d.get("is_admin", False), "privileges": self.get_privileges(u),
+             **self.access_summary(u)}
             for u, d in self.users.items()
         ]
+
+    # ------------------------------------------------------------------
+    # Roles and clearance (src/access.py). is_admin stays the source of
+    # truth for the Admin role; the other roles live in "roles".
+    # ------------------------------------------------------------------
+
+    def get_roles(self, username: str) -> List[str]:
+        user = self.users.get(username) or {}
+        return access.effective_roles(user.get("roles"), bool(user.get("is_admin")))
+
+    def has_capability(self, username: str, capability: str) -> bool:
+        if username not in self.users:
+            return False
+        return capability in access.capabilities_for(self.get_roles(username))
+
+    def access_summary(self, username: str) -> Dict[str, Any]:
+        """Roles, capabilities and clearance for one user (no secrets)."""
+        user = self.users.get(username) or {}
+        roles = self.get_roles(username)
+        override = user.get("clearance")
+        override = override if access.is_valid_clearance(override) else None
+        return {
+            "roles": roles,
+            "capabilities": access.capabilities_for(roles),
+            "clearance": access.effective_clearance(roles, override),
+            "clearance_override": override,
+            "clearance_default": access.default_clearance(roles),
+        }
+
+    def set_roles(self, username: str, roles: List[str],
+                  requesting_user: str) -> AccessChangeResult:
+        """Replace a user's roles. Admin only.
+
+        Granting or removing Admin goes through the same last-admin guard and
+        privilege stash as set_admin, inside the same critical section, so a
+        refused change leaves the stored roles untouched.
+        """
+        username = (username or "").strip().lower()
+        requesting_user = (requesting_user or "").strip().lower()
+        if not isinstance(roles, list) or access.invalid_roles(roles):
+            return AccessChangeResult.INVALID
+        wanted = access.normalize_roles(roles)
+        want_admin = access.ADMIN in wanted
+        stored = [r for r in wanted if r not in (access.ADMIN, access.BASIC)]
+        with self._config_lock:
+            target = self._config.get("users", {}).get(username)
+            if target is None:
+                return AccessChangeResult.USER_NOT_FOUND
+            if not self.users.get(requesting_user, {}).get("is_admin"):
+                return AccessChangeResult.NOT_AUTHORIZED
+            if self._check_admin_change_locked(target, want_admin) is SetAdminResult.LAST_ADMIN:
+                return AccessChangeResult.LAST_ADMIN
+            self._apply_admin_flag_locked(target, want_admin)
+            target["roles"] = stored
+            self._save()
+        logger.info("Set roles for '%s' to %s (by '%s')",
+                    username, self.get_roles(username), requesting_user)
+        return AccessChangeResult.OK
+
+    def set_clearance(self, username: str, clearance: Optional[str],
+                      requesting_user: str) -> AccessChangeResult:
+        """Set a clearance override, or None to use the roles' default. Admin only."""
+        username = (username or "").strip().lower()
+        requesting_user = (requesting_user or "").strip().lower()
+        if clearance is not None and not access.is_valid_clearance(clearance):
+            return AccessChangeResult.INVALID
+        with self._config_lock:
+            target = self._config.get("users", {}).get(username)
+            if target is None:
+                return AccessChangeResult.USER_NOT_FOUND
+            if not self.users.get(requesting_user, {}).get("is_admin"):
+                return AccessChangeResult.NOT_AUTHORIZED
+            if clearance is None:
+                target.pop("clearance", None)
+            else:
+                target["clearance"] = clearance
+            self._save()
+        logger.info("Set clearance override for '%s' to %s (by '%s')",
+                    username, clearance, requesting_user)
+        return AccessChangeResult.OK
 
     def get_privileges(self, username: str) -> Dict[str, Any]:
         """Get privileges for a user. Admins get all privileges."""
@@ -430,41 +521,52 @@ class AuthManager:
                 return SetAdminResult.USER_NOT_FOUND
             if not self.users.get(requesting_user, {}).get("is_admin"):
                 return SetAdminResult.NOT_AUTHORIZED
-            currently_admin = bool(target.get("is_admin"))
-            if currently_admin == is_admin:
-                return SetAdminResult.OK  # no-op; leave privileges untouched
-            if currently_admin and not is_admin:
-                admin_count = sum(1 for d in self.users.values() if d.get("is_admin"))
-                if admin_count <= 1:
-                    return SetAdminResult.LAST_ADMIN
-            # Write order matters for lock-free readers: get_privileges()
-            # reads without _config_lock and trusts is_admin, so the admin
-            # flag must be flipped while the stored map is safe to expose —
-            # before writing admin privileges on promote, after restoring
-            # the pre-admin map on demote.
-            if is_admin:
-                target["is_admin"] = True
-                # Stash the pre-admin map so a later demotion can restore it.
-                # While is_admin is set the stored map is inert: get_privileges
-                # short-circuits to ADMIN_PRIVILEGES and set_privileges refuses
-                # admins, so only set_admin ever touches the stash.
-                target["privileges_before_admin"] = dict(
-                    target.get("privileges") or DEFAULT_PRIVILEGES
-                )
-                target["privileges"] = dict(ADMIN_PRIVILEGES)
-            else:
-                # Restore the stashed pre-admin map. Fall back to defaults for
-                # users created as admins (their stored map is ADMIN_PRIVILEGES,
-                # which must not leak past demotion — e.g. can_use_bash) and
-                # for admins promoted before the stash existed.
-                target["privileges"] = dict(
-                    target.pop("privileges_before_admin", None)
-                    or DEFAULT_PRIVILEGES
-                )
-                target["is_admin"] = False
+            result = self._check_admin_change_locked(target, is_admin)
+            if result is not SetAdminResult.OK or bool(target.get("is_admin")) == is_admin:
+                return result  # refused, or a no-op that leaves privileges untouched
+            self._apply_admin_flag_locked(target, is_admin)
             self._save()
         logger.info("Set is_admin=%s for '%s' (by '%s')", is_admin, username, requesting_user)
         return SetAdminResult.OK
+
+    def _check_admin_change_locked(self, target: Dict[str, Any], is_admin: bool) -> "SetAdminResult":
+        """Refuse removing the last admin. Caller holds _config_lock."""
+        if bool(target.get("is_admin")) and not is_admin:
+            admin_count = sum(1 for d in self.users.values() if d.get("is_admin"))
+            if admin_count <= 1:
+                return SetAdminResult.LAST_ADMIN
+        return SetAdminResult.OK
+
+    def _apply_admin_flag_locked(self, target: Dict[str, Any], is_admin: bool) -> None:
+        """Flip is_admin and swap the privilege map. Caller holds _config_lock,
+        has checked _check_admin_change_locked, and saves afterwards."""
+        if bool(target.get("is_admin")) == is_admin:
+            return
+        # Write order matters for lock-free readers: get_privileges()
+        # reads without _config_lock and trusts is_admin, so the admin
+        # flag must be flipped while the stored map is safe to expose —
+        # before writing admin privileges on promote, after restoring
+        # the pre-admin map on demote.
+        if is_admin:
+            target["is_admin"] = True
+            # Stash the pre-admin map so a later demotion can restore it.
+            # While is_admin is set the stored map is inert: get_privileges
+            # short-circuits to ADMIN_PRIVILEGES and set_privileges refuses
+            # admins, so only set_admin ever touches the stash.
+            target["privileges_before_admin"] = dict(
+                target.get("privileges") or DEFAULT_PRIVILEGES
+            )
+            target["privileges"] = dict(ADMIN_PRIVILEGES)
+        else:
+            # Restore the stashed pre-admin map. Fall back to defaults for
+            # users created as admins (their stored map is ADMIN_PRIVILEGES,
+            # which must not leak past demotion — e.g. can_use_bash) and
+            # for admins promoted before the stash existed.
+            target["privileges"] = dict(
+                target.pop("privileges_before_admin", None)
+                or DEFAULT_PRIVILEGES
+            )
+            target["is_admin"] = False
 
     def change_password(self, username: str, current_password: str, new_password: str) -> bool:
         username = username.strip().lower()

@@ -1952,6 +1952,18 @@ async function initShortcuts() {
 /* ═══════════════════════════════════════════
    INIT & REFRESH
    ═══════════════════════════════════════════ */
+const ROLE_LABELS = {
+  basic: 'Basic', advanced: 'Advanced', manager: 'Manager',
+  general_manager: 'General Manager', compliance_officer: 'Compliance Officer', admin: 'Admin',
+};
+
+// Highest roles first; Basic is implied once any other role is held.
+function roleLabels(d) {
+  const roles = Array.isArray(d.roles) ? d.roles : [d.is_admin ? 'admin' : 'basic'];
+  const shown = roles.length > 1 ? roles.filter(r => r !== 'basic') : roles;
+  return shown.slice().reverse().map(r => ROLE_LABELS[r] || r).join(', ');
+}
+
 function initAccount() {
   // Populate user info
   fetch('/api/auth/status', { credentials: 'same-origin' })
@@ -1961,7 +1973,11 @@ function initAccount() {
       const roleEl = el('settings-account-role');
       const avatarEl = el('settings-account-avatar');
       if (nameEl) nameEl.textContent = d.username || 'Unknown';
-      if (roleEl) roleEl.textContent = d.is_admin ? 'Admin' : 'User';
+      if (roleEl) roleEl.textContent = roleLabels(d);
+      const consoleLink = el('settings-admin-console-link');
+      if (consoleLink) {
+        consoleLink.style.display = (d.capabilities || []).includes('admin.view') ? '' : 'none';
+      }
       if (avatarEl) {
         const initial = (d.username || '?')[0].toUpperCase();
         avatarEl.textContent = initial;

@@ -248,6 +248,11 @@ def main():
     # is a hard dependency (requirements.txt) and is verified by check_deps below.
     from dotenv import load_dotenv
     load_dotenv(os.path.join(BASE_DIR, ".env"), encoding="utf-8-sig")
+    # .env may set MAVEN_AI_ADMIN_USER / MAVEN_AI_ADMIN_PASSWORD; re-run the
+    # alias shim so they win over (and fill in) the legacy ODYSSEUS_* names
+    # read below. The import-time call in src.constants ran before .env loaded.
+    from src.brand import apply_env_aliases
+    apply_env_aliases()
 
     # Fail fast with a clear message if the CPU architecture is wrong (Apple
     # Silicon under an x86/Rosetta Python) before importing anything native.

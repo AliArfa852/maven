@@ -68,12 +68,26 @@ Interpretation, binding for Phase 2:
 ### D-1c-4  Logo
 **Answer: concept B, "Secure M"**: an M inside a rounded vault shape, with an accent keyhole dot (#e06c75), on the app palette (#282c34 / #9cdef2). The human picked it from the concepts canvas https://claude.ai/artifact/Uc4Y6HdPCamTiycVF1ZQSf. Master files are in `.claude/brand/b-secure-m/` (concept C, the prompt mark, is saved in `.claude/brand/c-prompt-mark/` for later, at the human's request): mark, light mark, solid favicon, wordmark lockup (SVG), plus icon-192/512, maskable-512 and favicon-16/32 (PNG). Below 32px the keyhole dot drops and the tile fills solid.
 
+## Answered (human, 2026-10-07)
+
+### D-2-1  Corporate database
+**Answer: PostgreSQL.** SQLite stays for single-user installs.
+
+### D-2-2  Default clearance per role
+**Answer: each role's default clearance applies to a new user unless an Administrator sets it.** The defaults are the plan §3.2 table.
+
+### D-2-8  Admin console and multiple roles (new)
+**Answer (human's words, summarised):**
+- Add a default admin account. There is always a default user with admin access.
+- Add an admin page for monitoring, decisions and changes.
+- Compliance Officers and Managers can open it, but most of its tools are locked by access. Managers can only see things, with no changes. Compliance Officers can do their duties and nothing else.
+- Each user can have multiple roles.
+
 ## Pending
 
 ### D-2-1 … D-2-7  Plan v2 decisions (main loop, 2026-10-07)
 kind: product decisions. See MAVEN_PLAN.md v2. None blocks Phase 0 or 1; D-2-1 and D-2-2 must be answered before Phase 2 opens.
-- **D-2-1 Corporate database.** A) Make PostgreSQL the corporate default; SQLite stays for single-user (recommended: concurrency, row-level security, pgvector). B) SQLite only.
-- **D-2-2 Default clearance per role.** A) The table in plan §3.2, where Admin gets Internal clearance (separation of duties) and a Compliance Officer role is added (recommended). B) Admin sees everything, with no Compliance role.
+- D-2-1 and D-2-2: answered 2026-10-07 (see Answered).
 - **D-2-3 PII/DLP engine.** A) Presidio + rules + small local NER, after the license is verified (recommended). B) Rules only.
 - **D-2-4 Graph engine inside `graph_service/`.** A) PostgreSQL + Apache AGE + pgvector (recommended, pending verification). B) Neo4j Community. C) Decide after a spike that compares both on a pilot corpus.
 - **D-2-5 Sheets editing.** A) The vendored SheetJS viewer/editor now; OnlyOffice/Collabora integration later (recommended). B) Integrate OnlyOffice/Collabora now.
