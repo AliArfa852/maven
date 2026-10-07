@@ -1,12 +1,13 @@
 # src/constants.py
 """Application-wide constants and configuration values."""
 import os
+import sys
 
 from src.brand import apply_env_aliases
 
 apply_env_aliases()  # MAVEN_AI_* <-> ODYSSEUS_*; must run before any getenv below
 
-from src.runtime_paths import default_fastembed_cache_dir, get_app_root, get_default_data_dir
+from src.runtime_paths import get_app_root, get_default_data_dir, onedrive_safe_hf_env
 from src.brand import maven_env
 
 APP_VERSION = "1.0.3"
@@ -72,9 +73,18 @@ MAIL_ATTACHMENTS_DIR = maven_env("MAVEN_AI_MAIL_ATTACHMENTS_DIR", os.path.join(D
 # only returns the default when the var is ABSENT, so the empty string would win →
 # os.makedirs("") raises [Errno 2] No such file or directory: '' → FastEmbed fails to
 # init and all vector features (RAG, semantic memory, tool index) silently degrade.
-# Inside OneDrive on Windows the default moves to %LOCALAPPDATA% (see
-# default_fastembed_cache_dir): OneDrive can't hold the downloader's links.
-FASTEMBED_CACHE_DIR = os.getenv("FASTEMBED_CACHE_PATH") or default_fastembed_cache_dir(DATA_DIR)
+FASTEMBED_CACHE_DIR = os.getenv("FASTEMBED_CACHE_PATH") or os.path.join(DATA_DIR, "fastembed_cache")
+# Inside OneDrive on Windows, make the model download use plain files over
+# plain HTTP so the cache can stay in the project folder (WinError 1920
+# otherwise). huggingface_hub reads these at import, which happens later and
+# lazily (fastembed); if it is already loaded, set its constants too.
+_HF_ENV = onedrive_safe_hf_env(FASTEMBED_CACHE_DIR)
+if _HF_ENV:
+    os.environ.update(_HF_ENV)
+    _hf_constants = sys.modules.get("huggingface_hub.constants")
+    if _hf_constants is not None:
+        for _name in _HF_ENV:
+            setattr(_hf_constants, _name, True)
 
 # Agent tool output limits (single source of truth — imported by tool_execution.py,
 # tool_implementations.py, agent_tools.py, and any other module that needs them)

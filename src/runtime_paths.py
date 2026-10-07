@@ -52,18 +52,18 @@ def is_inside_onedrive(path: str, environ=None) -> bool:
     return any(part.startswith("onedrive") for part in norm.split("\\"))
 
 
-def default_fastembed_cache_dir(data_dir: str, environ=None, os_name: str = None) -> str:
-    """Where FastEmbed keeps its model files when FASTEMBED_CACHE_PATH is unset.
 
-    Normally ``<data_dir>/fastembed_cache``. On Windows with the data folder
-    inside OneDrive, use ``%LOCALAPPDATA%\\maven\\fastembed_cache`` instead,
-    so the download works and the model isn't synced to the cloud.
+def onedrive_safe_hf_env(cache_dir: str, environ=None, os_name: str = None) -> dict:
+    """Downloader settings that make a HuggingFace cache work inside OneDrive.
+
+    The cache normally stores files as links, and the newer Xet transfer
+    writes into those blobs; inside a OneDrive folder on Windows that fails
+    with WinError 1920. Plain files over plain HTTP work, and the cache stays
+    in the project folder. Returns only the settings the caller hasn't set
+    itself (empty when not needed), so explicit choices are never overridden.
     """
     env = os.environ if environ is None else environ
-    default = os.path.join(data_dir, "fastembed_cache")
-    if (os_name or os.name) != "nt" or not is_inside_onedrive(data_dir, env):
-        return default
-    local = env.get("LOCALAPPDATA")
-    if not local:
-        return default
-    return os.path.join(local, "maven", "fastembed_cache")
+    if (os_name or os.name) != "nt" or not is_inside_onedrive(cache_dir, env):
+        return {}
+    wanted = {"HF_HUB_DISABLE_SYMLINKS": "1", "HF_HUB_DISABLE_XET": "1"}
+    return {k: v for k, v in wanted.items() if k not in env}

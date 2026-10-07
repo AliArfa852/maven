@@ -69,24 +69,26 @@ def test_explicit_fastembed_cache_path_is_respected(monkeypatch):
         _restore(monkeypatch)
 
 
-def test_onedrive_data_dir_moves_cache_to_localappdata_on_windows():
-    from src.runtime_paths import default_fastembed_cache_dir, is_inside_onedrive
 
-    env = {"OneDrive": r"C:\Users\ali\OneDrive", "LOCALAPPDATA": r"C:\Users\ali\AppData\Local"}
-    data = r"C:\Users\ali\OneDrive\Documents\projects\maven\data"
-    assert is_inside_onedrive(data, env) is True
-    assert default_fastembed_cache_dir(data, env, os_name="nt") == os.path.join(
-        r"C:\Users\ali\AppData\Local", "maven", "fastembed_cache")
+def test_onedrive_cache_on_windows_gets_plain_file_downloads():
+    from src.runtime_paths import is_inside_onedrive, onedrive_safe_hf_env
+
+    env = {"OneDrive": r"C:\Users\ali\OneDrive"}
+    cache = r"C:\Users\ali\OneDrive\Documents\projects\maven\data\fastembed_cache"
+    assert is_inside_onedrive(cache, env) is True
+    assert onedrive_safe_hf_env(cache, env, os_name="nt") == {
+        "HF_HUB_DISABLE_SYMLINKS": "1", "HF_HUB_DISABLE_XET": "1"}
     # No OneDrive env var exported: the path component still gives it away.
     assert is_inside_onedrive(r"D:\OneDrive - Contoso\maven\data", {}) is True
 
 
-def test_cache_stays_in_data_dir_outside_onedrive_or_off_windows():
-    from src.runtime_paths import default_fastembed_cache_dir, is_inside_onedrive
+def test_no_change_outside_onedrive_off_windows_or_when_set_explicitly():
+    from src.runtime_paths import is_inside_onedrive, onedrive_safe_hf_env
 
-    env = {"OneDrive": r"C:\Users\ali\OneDrive", "LOCALAPPDATA": r"C:\Users\ali\AppData\Local"}
-    local = r"C:\work\maven\data"
-    assert is_inside_onedrive(local, env) is False
-    assert default_fastembed_cache_dir(local, env, os_name="nt") == os.path.join(local, "fastembed_cache")
-    onedrive = r"C:\Users\ali\OneDrive\maven\data"
-    assert default_fastembed_cache_dir(onedrive, env, os_name="posix") == os.path.join(onedrive, "fastembed_cache")
+    env = {"OneDrive": r"C:\Users\ali\OneDrive"}
+    assert is_inside_onedrive(r"C:\work\maven\data", env) is False
+    assert onedrive_safe_hf_env(r"C:\work\maven\data", env, os_name="nt") == {}
+    onedrive = r"C:\Users\ali\OneDrive\maven\data\fastembed_cache"
+    assert onedrive_safe_hf_env(onedrive, env, os_name="posix") == {}
+    explicit = dict(env, HF_HUB_DISABLE_SYMLINKS="0")
+    assert onedrive_safe_hf_env(onedrive, explicit, os_name="nt") == {"HF_HUB_DISABLE_XET": "1"}
