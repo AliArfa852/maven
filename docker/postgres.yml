@@ -1,0 +1,40 @@
+# PostgreSQL overlay (decision D-2-1): Maven's database in PostgreSQL instead
+# of SQLite, for multi-user and corporate installs.
+#
+#   1. In .env set MAVEN_AI_POSTGRES_PASSWORD to a long random value made of
+#      letters and digits (it goes into a connection URL).
+#   2. docker compose -f docker-compose.yml -f docker/postgres.yml up -d --build
+#      (or COMPOSE_FILE=docker-compose.yml:docker/postgres.yml in .env;
+#       on Windows separate the files with ";")
+#
+# Moving an existing install: stop the app, start only the database
+# (`docker compose ... up -d postgres`), then copy the SQLite data across with
+#   docker compose ... run --rm maven python scripts/maven-db copy-to-postgres
+# and start everything. The SQLite file is left untouched as a fallback.
+#
+# The database is reachable only from containers in this stack: no host port.
+services:
+  postgres:
+    image: docker.io/library/postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: maven
+      POSTGRES_USER: maven
+      POSTGRES_PASSWORD: ${MAVEN_AI_POSTGRES_PASSWORD:?set MAVEN_AI_POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maven -d maven"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  maven:
+    environment:
+      - DATABASE_URL=postgresql://maven:${MAVEN_AI_POSTGRES_PASSWORD:?set MAVEN_AI_POSTGRES_PASSWORD in .env}@postgres:5432/maven
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:

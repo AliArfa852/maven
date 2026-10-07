@@ -199,8 +199,48 @@ def _default_document_owner() -> str | None:
         return None
 
 
+_EXTERNAL_ENGINE = None
+
+
+def _external_db_engine():
+    """SQLAlchemy engine for a non-SQLite DATABASE_URL (e.g. PostgreSQL), else None.
+
+    This server runs as its own process, and accounts then live in that
+    database instead of data/app.db. Created once, lazily.
+    """
+    global _EXTERNAL_ENGINE
+    url = os.environ.get("DATABASE_URL", "").strip()
+    if not url:
+        return None
+    from src.db_url import is_sqlite_url, with_installed_postgres_driver
+    if is_sqlite_url(url):
+        return None
+    if _EXTERNAL_ENGINE is None:
+        from sqlalchemy import create_engine
+        _EXTERNAL_ENGINE = create_engine(with_installed_postgres_driver(url), pool_pre_ping=True)
+    return _EXTERNAL_ENGINE
+
+
+_ACCOUNT_SELECT = """
+    SELECT id, owner, name, is_default, enabled,
+           imap_host, imap_port, imap_user, imap_password, imap_starttls,
+           smtp_host, smtp_port, smtp_security, smtp_user, smtp_password, from_address
+    FROM email_accounts WHERE enabled = :enabled
+    ORDER BY is_default DESC, created_at ASC
+"""
+
+
 def _read_accounts_from_db() -> list:
     """Return all enabled email account rows. Empty list if missing. Never raises."""
+    engine = _external_db_engine()
+    if engine is not None:
+        try:
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                rows = conn.execute(text(_ACCOUNT_SELECT), {"enabled": True}).mappings().all()
+            return [dict(r) for r in rows]
+        except Exception:
+            return []
     path = _db_path()
     if not path.exists():
         return []
