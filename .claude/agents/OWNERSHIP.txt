@@ -1,0 +1,274 @@
+# File ownership map for the agent fleet.
+#
+# Format: <glob>  <owner>     (fnmatch: `*` also matches `/`)
+# Rules are ORDERED and FIRST MATCH WINS, so every tracked file has exactly one
+# owner by construction. Put specific rules above broad ones.
+# `human` = no agent may edit it; findings there become BACKLOG items for the user.
+#
+# Verify after any change:  ./venv/Scripts/python scripts/fleet_ownership.py check
+# Look up one file:         ./venv/Scripts/python scripts/fleet_ownership.py who <path>
+#
+# Band legend (see README.md): core = agent-core, chat-core, security-core,
+# inference-core | supporting = workspace-apps | optional = human
+
+# ---- Phase 1c rename: new files (rules land before the files exist; check passes once they are created)
+NOTICE.md                                docs-keeper
+src/brand.py                             security-core
+tests/test_brand*.py                     security-core
+static/js/brand.js                       chat-core
+static/brand/*                           chat-core
+static/manifest.json                     chat-core
+scripts/maven-cookbook                   inference-core
+scripts/maven-mcp                        agent-core
+scripts/maven-sessions                   chat-core
+scripts/maven-preset                     chat-core
+
+# ---------------------------------------------------------------- human-only
+specs/*                                  human   # read-only by specs/_readme.md rule
+ROADMAP.md                               human
+LICENSE                                  human
+licenses/*                               human
+SECURITY.md                              human
+THREAT_MODEL.md                          human
+swift/*                                  human   # optional band
+companion/*                              human   # optional band
+website/*                                human   # optional band
+integrations/*                           human   # optional band
+assets/*                                 human
+config/*                                 human
+Odysseus.spec                            human
+build-macos-app.sh                       human
+build-windows-portable.ps1               human
+start-macos.sh                           human
+launch-windows.ps1                       human
+update_windows.bat                       human
+install-service.sh                       human
+odysseus-ui.service                      human
+setup.py                                 human
+scripts/loop_snapshot.py                 human   # safety: snapshot step
+scripts/fleet_ownership.py               human   # safety: ownership gate
+scripts/fleet_gate.py                    human   # safety: verification gate
+.github/*                                human   # CI is a gate; agents do not edit it
+
+# ------------------------------------------------------------ docs-keeper
+README.md                                docs-keeper
+CONTRIBUTING.md                          docs-keeper
+ACKNOWLEDGMENTS.md                       docs-keeper
+static/js/MODULE_SUMMARY.md              docs-keeper
+
+# ------------------------------------------------------- inference-core (core)
+docker-compose.gpu-*.yml                 inference-core
+routes/cookbook_*                        inference-core
+routes/hwfit_routes.py                   inference-core
+services/hwfit/*                         inference-core
+src/cookbook_serve_lifecycle.py          inference-core
+src/tools/cookbook.py                    inference-core
+src/model_capability_readers/llamacpp.py inference-core
+src/model_capability_readers/lmstudio.py inference-core
+src/model_capability_readers/ollama.py   inference-core
+static/js/cookbook*                      inference-core
+scripts/odysseus-cookbook                inference-core
+scripts/check-docker*gpu.sh              inference-core
+scripts/hf_download.py                   inference-core
+scripts/add_hwfit_models.py              inference-core
+scripts/import_from_vllm_recipes.py      inference-core
+scripts/backfill_model_release_dates.py  inference-core
+tests/*cookbook*                         inference-core
+tests/*hwfit*                            inference-core
+tests/*llamacpp*                         inference-core
+tests/*ollama*                           inference-core
+tests/*lmstudio*                         inference-core
+
+# -------------------------------------------------------- security-core (core)
+# Security boundaries + the platform every request passes through.
+app.py                                   security-core
+launcher.py                              security-core
+core/*                                   security-core
+src/constants.py                         security-core
+src/runtime_paths.py                     security-core
+src/config.py                            security-core
+src/database.py                          security-core
+src/exceptions.py                        security-core
+src/app_helpers.py                       security-core
+src/app_initializer.py                   security-core
+src/auth_helpers.py                      security-core
+src/owner_identity.py                    security-core
+src/outbound_fetch.py                    security-core
+src/prompt_security.py                   security-core
+src/rate_limiter.py                      security-core
+src/tls_overrides.py                     security-core
+src/secret_storage.py                    security-core
+src/settings_scrub.py                    security-core
+src/api_key_manager.py                   security-core
+src/tool_security.py                     security-core
+src/tool_policy.py                       security-core
+src/tool_approvals.py                    security-core
+src/tool_approval_scopes.py              security-core
+src/task_action_policy.py                security-core
+src/interactive_gate.py                  security-core
+src/host_docker_access.py                security-core
+src/optional_deps.py                     security-core
+src/readiness.py                         security-core
+src/service_health.py                    security-core
+routes/__init__.py                       security-core
+routes/_validators.py                    security-core
+routes/auth_routes.py                    security-core
+routes/api_token_routes.py               security-core
+routes/admin_wipe*                       security-core
+routes/backup_routes.py                  security-core
+routes/diagnostics_routes.py             security-core
+routes/vault*                            security-core
+static/js/admin.js                       security-core
+Dockerfile                               security-core
+docker-compose.yml                       security-core
+docker/*                                 security-core
+.dockerignore                            security-core
+.gitignore                               security-core
+.gitattributes                           security-core
+.env.example                             security-core
+requirements.txt                         security-core
+requirements-optional.txt                security-core
+pyproject.toml                           security-core
+package.json                             security-core
+package-lock.json                        security-core
+scripts/update_database.py               security-core
+scripts/claim_ownerless.py               security-core
+scripts/fix_paths.py                     security-core
+# test infrastructure (shared by everyone, so one careful owner)
+tests/conftest.py                        security-core
+tests/_taxonomy.py                       security-core
+tests/run_focus.py                       security-core
+tests/run_order_report.py                security-core
+tests/helpers/*                          security-core
+tests/README.md                          security-core
+tests/TESTING_STANDARD.md                security-core
+tests/*.md                               security-core
+# A test follows the module it is named after (test_action_intents*.py ->
+# owner of src/action_intents.py). No module match -> falls through to the
+# keyword rules below, then to the workspace-apps fallback.
+tests/*test_*.py                         @source
+tests/*auth*                             security-core
+tests/*owner*                            security-core
+tests/*security*                         security-core
+tests/*ssrf*                             security-core
+tests/*xss*                              security-core
+tests/*redos*                            security-core
+tests/*token*                            security-core
+tests/*admin*                            security-core
+tests/*confine*                          security-core
+tests/*privilege*                        security-core
+tests/*backup*                           security-core
+tests/*migration*                        security-core
+tests/*database*                         security-core
+tests/*docker*                           security-core
+
+# ----------------------------------------------------------- agent-core (core)
+src/agent_loop.py                        agent-core
+src/agent_runs.py                        agent-core
+src/agent_tools/*                        agent-core
+src/tools/*                              agent-core
+src/tool_*                               agent-core
+src/action_intents.py                    agent-core
+src/ai_interaction.py                    agent-core
+src/builtin_actions.py                   agent-core
+src/builtin_mcp.py                       agent-core
+src/bg_jobs.py                           agent-core
+src/bg_monitor.py                        agent-core
+src/context_budget.py                    agent-core
+src/context_compactor.py                 agent-core
+src/endpoint_resolver.py                 agent-core
+src/foreground_model_routing.py          agent-core
+src/llm_core.py                          agent-core
+src/model_capabilities.py                agent-core
+src/model_capability_readers/*           agent-core
+src/model_context.py                     agent-core
+src/model_discovery.py                   agent-core
+src/teacher_escalation.py                agent-core
+src/mcp_manager.py                       agent-core
+src/mcp_oauth.py                         agent-core
+src/chatgpt_subscription.py              agent-core
+src/copilot.py                           agent-core
+routes/model_routes.py                   agent-core
+routes/mcp*                              agent-core
+routes/shell_routes.py                   agent-core
+routes/chatgpt_subscription_routes.py    agent-core
+routes/codex_routes.py                   agent-core
+routes/copilot_routes.py                 agent-core
+routes/device_flow.py                    agent-core
+services/shell/*                         agent-core
+static/js/model/*                        agent-core
+static/js/modelPicker.js                 agent-core
+static/js/modelSort.js                   agent-core
+static/js/models.js                      agent-core
+static/js/providers.js                   agent-core
+static/js/providerDeviceFlow.js          agent-core
+scripts/agent_migration_manifest.py      agent-core
+scripts/odysseus-mcp                     agent-core
+tests/tools/*                            agent-core
+tests/*agent*                            agent-core
+tests/*tool*                             agent-core
+tests/*llm*                              agent-core
+tests/*provider*                         agent-core
+tests/*model*                            agent-core
+tests/*endpoint*                         agent-core
+tests/*teacher*                          agent-core
+tests/*context*                          agent-core
+tests/*builtin*                          agent-core
+tests/*discovery*                        agent-core
+tests/*prompt*                           agent-core
+tests/*mcp*                              agent-core
+tests/*shell*                            agent-core
+tests/*codex*                            agent-core
+
+# ------------------------------------------------------------ chat-core (core)
+# Chat path + the global frontend shell (chat is the main surface).
+routes/chat_*                            chat-core
+routes/session_routes.py                 chat-core
+routes/history*                          chat-core
+routes/compare*                          chat-core
+routes/assistant_routes.py               chat-core
+routes/preset_routes.py                  chat-core
+src/chat_*                               chat-core
+src/session_*                            chat-core
+src/attachment_refs.py                   chat-core
+src/preset_manager.py                    chat-core
+src/event_bus.py                         chat-core
+static/app.js                            chat-core
+static/index.html                        chat-core
+static/style.css                         chat-core
+static/js/chat*                          chat-core
+static/js/streaming*                     chat-core
+static/js/liveThinkingThrottle.js        chat-core
+static/js/composerArrowUpRecall.js       chat-core
+static/js/slash*                         chat-core
+static/js/sessions.js                    chat-core
+static/js/compare/*                      chat-core
+static/js/markdown*                      chat-core
+static/js/presets.js                     chat-core
+static/js/search-chat.js                 chat-core
+static/js/codeRunner.js                  chat-core
+scripts/odysseus-sessions                chat-core
+scripts/odysseus-preset                  chat-core
+tests/streaming/*                        chat-core
+tests/*chat*                             chat-core
+tests/*session*                          chat-core
+tests/*stream*                           chat-core
+tests/*history*                          chat-core
+tests/*compare*                          chat-core
+tests/*markdown*                         chat-core
+tests/*preset*                           chat-core
+tests/*thinking*                         chat-core
+tests/*slash*                            chat-core
+tests/*composer*                         chat-core
+
+# ------------------------------------------------- workspace-apps (supporting)
+# Everything else under the app's source dirs: email, calendar, notes, tasks,
+# research, search, documents/RAG, memory/skills, gallery, speech, CLIs, and
+# the remaining frontend modules.
+routes/*                                 workspace-apps
+src/*                                    workspace-apps
+services/*                               workspace-apps
+mcp_servers/*                            workspace-apps
+static/*                                 workspace-apps
+scripts/*                                workspace-apps
+tests/*                                  workspace-apps
