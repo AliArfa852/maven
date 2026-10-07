@@ -709,6 +709,10 @@ app.include_router(setup_session_routes(
     upload_handler=upload_handler,
 ))
 
+# Flagged-conversation review (Compliance Officers; Admin console)
+from routes.compliance_routes import setup_compliance_routes
+app.include_router(setup_compliance_routes())
+
 # Admin Danger Zone wipes (Settings → System → Danger Zone)
 from routes.admin_wipe.admin_wipe_routes import setup_admin_wipe_routes
 app.include_router(setup_admin_wipe_routes(session_manager))

@@ -130,6 +130,72 @@ async function saveUser(username, boxes, select, button) {
   }
 }
 
+// ── Flagged conversations (compliance.review only) ──
+
+async function loadFlags() {
+  const status = el('ac-flag-status').value;
+  const box = el('ac-flags-status');
+  box.className = 'status';
+  box.textContent = 'Loading…';
+  try {
+    const data = await api(`/api/compliance/flags?status=${encodeURIComponent(status)}`);
+    const c = data.counts || {};
+    el('ac-flag-counts').textContent =
+      `${c.open || 0} open · ${c.escalated || 0} escalated · ${c.warned || 0} warned · ${c.dismissed || 0} dismissed`;
+    renderFlags(data.flags || []);
+    box.textContent = data.flags && data.flags.length ? '' : 'Nothing here.';
+  } catch (err) {
+    box.className = 'status error';
+    box.textContent = err.message;
+  }
+}
+
+function renderFlags(flags) {
+  const rows = el('ac-flag-rows');
+  rows.replaceChildren();
+  for (const f of flags) {
+    const tr = node('tr');
+    tr.append(node('td', f.created_at ? new Date(f.created_at).toLocaleString() : ''));
+    tr.append(node('td', f.owner || 'unknown'));
+    const why = node('td');
+    why.append(node('span', f.category_label, f.severity === 'high' ? 'sev-high' : ''));
+    why.append(node('div', `${f.rule} · ${f.severity}`, 'sub'));
+    tr.append(why);
+    tr.append(node('td', f.excerpt, 'excerpt'));
+    const act = node('td', null, 'actions');
+    if (f.status === 'open') {
+      for (const [decision, label] of [['dismiss', 'Dismiss'], ['warn', 'Warn'], ['escalate', 'Escalate']]) {
+        const b = node('button', label);
+        b.addEventListener('click', () => decideFlag(f.id, decision, b));
+        act.append(b);
+      }
+    } else {
+      act.append(node('div', `${f.status} by ${f.reviewed_by || '?'}`));
+      if (f.review_note) act.append(node('div', f.review_note, 'sub'));
+    }
+    tr.append(act);
+    rows.append(tr);
+  }
+}
+
+async function decideFlag(id, decision, button) {
+  const note = window.prompt(`Optional note for "${decision}":`, '');
+  if (note === null) return; // cancelled
+  button.disabled = true;
+  try {
+    await api(`/api/compliance/flags/${encodeURIComponent(id)}/decision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision, note }),
+    });
+    await loadFlags();
+  } catch (err) {
+    el('ac-flags-status').className = 'status error';
+    el('ac-flags-status').textContent = err.message;
+    button.disabled = false;
+  }
+}
+
 async function load() {
   const brand = window.MAVEN_BRAND ? window.MAVEN_BRAND.name : '';
   el('ac-title').textContent = brand ? `${brand} Admin Console` : 'Admin Console';
@@ -147,7 +213,15 @@ async function load() {
   }
   const canManage = caps.includes('admin.manage');
   el('ac-viewonly').hidden = canManage;
+  if (!canManage && caps.includes('compliance.review')) {
+    el('ac-viewonly').textContent =
+      'Users and roles are view only (an Admin changes them). You can review flagged conversations below.';
+  }
   el('ac-compliance').hidden = !caps.includes('compliance.review');
+  if (caps.includes('compliance.review')) {
+    el('ac-flag-status').addEventListener('change', loadFlags);
+    loadFlags();
+  }
 
   const [catalogue, users] = await Promise.all([api('/api/auth/roles'), api('/api/auth/users')]);
   renderRoles(catalogue);

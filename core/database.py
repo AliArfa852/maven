@@ -2088,6 +2088,30 @@ def _migrate_seed_email_account():
 # Any future migrations or schema changes that temporarily violate foreign-key
 # constraints will fail. To perform such operations, foreign_keys must be
 # temporarily disabled around the migration workflow.
+class ConversationFlag(Base):
+    """A chat message that matched a flagging rule (plan v2 §6, src/flagging.py).
+
+    Stores a short, masked excerpt around the match, never the whole message,
+    so reviewers see only what they need. Decisions are made by Compliance
+    Officers and recorded with who made them and when.
+    """
+    __tablename__ = "conversation_flags"
+
+    id          = Column(String, primary_key=True)
+    session_id  = Column(String, nullable=False, index=True)
+    message_id  = Column(String, nullable=True)
+    owner       = Column(String, nullable=True, index=True)   # who sent the message
+    category    = Column(String, nullable=False)              # see src.flagging.CATEGORIES
+    rule        = Column(String, nullable=False)
+    severity    = Column(String, nullable=False, default="medium")  # low / medium / high
+    excerpt     = Column(Text, nullable=False, default="")
+    status      = Column(String, nullable=False, default="open", index=True)  # open / dismissed / warned / escalated
+    created_at  = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    reviewed_by = Column(String, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    review_note = Column(Text, nullable=True)
+
+
 def init_db():
     """
     Initialize the database by creating all tables.

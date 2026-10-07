@@ -96,7 +96,9 @@ A user can see an item only when **all three** allow it: role permits the featur
 
 **Built (2026-10-07, branch `claude/bold-lovelace-pppvnh`):** `src/access.py` (roles, clearance, capabilities); roles and clearance stored per user in `core/auth.py`, with Admin still driven by `is_admin` so every existing admin gate is unchanged; `require_capability` in `core/middleware.py`; `GET /api/auth/users` and `GET /api/auth/roles` for console viewers; `PUT /api/auth/users/{u}/roles` and `/clearance` for Admins; the `/admin-console` page, linked from Settings → Account; `tests/test_access_roles.py`.
 
-**Next for the console:** the flag review queue (with flagging, §6); audit-log and usage views; read-only views of the existing admin settings for Managers, after each one is checked for secrets it might show.
+**Built (2026-10-07): conversation flagging rules v1** (`src/flagging.py`, `routes/compliance_routes.py`, `conversation_flags` table). Every saved user message is checked after it is committed (never blocks chat): pasted secrets, instruction-override attempts, bulk export of sensitive data, requests for other people's data, card numbers, many email addresses, and an optional `MAVEN_AI_FLAG_KEYWORDS` watch list. Stores a masked excerpt only. Compliance Officers list and decide (dismiss / warn / escalate, with a note); Admins and Managers get 403. `MAVEN_AI_FLAGGING=0` turns it off. **Next for flagging:** an employee-facing notice that use is monitored (legal requirement in many places), admin-editable rules and keywords, retention for decided flags, a local classifier (Phase 6).
+
+**Next for the console:** audit-log and usage views; read-only views of the existing admin settings for Managers, after each one is checked for secrets it might show.
 
 ### 3.3 Labels on data
 

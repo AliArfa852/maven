@@ -32,6 +32,9 @@
     .sub { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
     .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px;
       background: var(--accent-soft); color: var(--accent); margin: 0 4px 2px 0; white-space: nowrap; }
+    .sev-high { color: var(--error); font-weight: 600; }
+    td.excerpt { max-width: 420px; word-break: break-word; }
+    .actions button { margin: 0 4px 4px 0; }
     .notice { background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 8px 12px; font-size: 13px; }
     .error { color: var(--error); }
     .table-wrap { overflow-x: auto; }
@@ -71,7 +74,25 @@
 
     <section id="ac-compliance" hidden>
       <h2>Flagged conversations</h2>
-      <p class="sub">Your review queue. Conversation flagging is not built yet (plan v2, Phase 2), so there is nothing to review.</p>
+      <p class="sub">Messages that matched a flagging rule. You see a short excerpt with secrets and personal data masked, not the whole conversation. A flag is a prompt to look, not proof of wrongdoing.</p>
+      <p>
+        <label for="ac-flag-status" class="sub" style="margin:0">Show</label>
+        <select id="ac-flag-status">
+          <option value="open">Open</option>
+          <option value="escalated">Escalated</option>
+          <option value="warned">Warned</option>
+          <option value="dismissed">Dismissed</option>
+          <option value="all">All</option>
+        </select>
+        <span id="ac-flag-counts" class="sub"></span>
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>When</th><th>User</th><th>Why</th><th>Excerpt</th><th>Decision</th></tr></thead>
+          <tbody id="ac-flag-rows"></tbody>
+        </table>
+      </div>
+      <p id="ac-flags-status" class="status"></p>
     </section>
 
     <section id="ac-roles" hidden>
