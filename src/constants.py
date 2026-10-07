@@ -15,7 +15,8 @@ APP_VERSION = "1.0.3"
 # Base paths
 BASE_DIR = os.path.join(get_app_root(), "")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-DATA_DIR = maven_env("MAVEN_AI_DATA_DIR", get_default_data_dir())
+# `or`: an empty MAVEN_AI_DATA_DIR= line in .env must not put data in the cwd.
+DATA_DIR = maven_env("MAVEN_AI_DATA_DIR") or get_default_data_dir()
 
 # Data file paths
 # Single source of truth: every persisted file/dir lives under DATA_DIR, which
@@ -66,7 +67,7 @@ MEMORY_VECTORS_DIR = os.path.join(DATA_DIR, "memory_vectors")
 AGENT_WORKSPACE_DIR = os.path.join(DATA_DIR, "agent_workspace")
 
 # Paths with an intentional dedicated env override, defaulting under DATA_DIR.
-MAIL_ATTACHMENTS_DIR = maven_env("MAVEN_AI_MAIL_ATTACHMENTS_DIR", os.path.join(DATA_DIR, "mail-attachments"))
+MAIL_ATTACHMENTS_DIR = maven_env("MAVEN_AI_MAIL_ATTACHMENTS_DIR") or os.path.join(DATA_DIR, "mail-attachments")
 # `or` (not os.getenv's default arg) so a PRESENT-but-EMPTY value falls back to
 # the default. docker-compose.yml injects `FASTEMBED_CACHE_PATH=${FASTEMBED_CACHE_PATH:-}`,
 # which sets the var to "" when the host hasn't defined it. os.getenv(name, default)
