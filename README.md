@@ -26,21 +26,25 @@
 ```bash
 git clone https://github.com/AliArfa852/maven.git
 cd maven
-cp .env.example .env
+cp docker/local.env.example .env      # Windows: copy docker\local.env.example .env
 docker compose up -d --build
 ```
 
-Open `http://localhost:7000` when the containers are healthy. The first admin password is printed in `docker compose logs odysseus`.
+Open `http://localhost:7000` when the containers are healthy and log in as `admin` / `maven-local-test` (set in `.env`; local testing only, so change it before anyone else can reach the app). If you leave `MAVEN_AI_ADMIN_PASSWORD` empty, a random password is printed once in `docker logs maven`. For every setting, see `.env.example`.
 
-The compose files pull the official multi-arch image `ghcr.io/odysseus-dev/odysseus` (published by CI on every push to `main` and `dev`) and only build locally if the pull fails — so this also works on hosts without a build toolchain, e.g. as a [Portainer](https://www.portainer.io/) stack.
+The app container is named `maven` (`docker logs maven`, `docker exec -it maven sh`) and the compose service is `maven` (`docker compose logs maven`).
 
-**Production deployments:** pin the immutable tag instead of `:latest`. `:latest` and bare `:X.Y.Z` tags move on every push to `main`, but `:X.Y.Z-<sha>` (e.g. `1.0.2-7c8070f`) always refers to one specific build:
+**Upgrading an older install** (its compose service was renamed from `odysseus` to `maven`): run `docker compose up -d --build --remove-orphans` once, so the old container is removed and stops holding port 7000. Your data stays in `./data`.
+
+The compose files use the image `ghcr.io/aliarfa852/maven` and build locally when it can't be pulled, so this also works on hosts without a published image, e.g. as a [Portainer](https://www.portainer.io/) stack.
+
+**Production deployments:** pin an immutable tag instead of `:latest`. `:latest` and bare `:X.Y.Z` tags move on every push to `main`, but `:X.Y.Z-<sha>` (e.g. `1.0.2-7c8070f`) always refers to one specific build:
 
 ```bash
-ODYSSEUS_IMAGE=ghcr.io/odysseus-dev/odysseus:1.0.2-7c8070f docker compose up -d
+MAVEN_AI_IMAGE=ghcr.io/aliarfa852/maven:1.0.2-7c8070f docker compose up -d
 ```
 
-Compose variables such as `ODYSSEUS_IMAGE` keep their names for now; app settings accept `MAVEN_AI_*`.
+Settings use `MAVEN_AI_*` names; the old `ODYSSEUS_*` names still work, and the new name wins when both are set.
 
 Native installs, GPU notes, Windows/macOS instructions, HTTPS, and configuration live in the [setup guide](website/setup.md).
 

@@ -1,4 +1,4 @@
-#compdef maven maven-backup maven-calendar maven-contacts maven-cookbook maven-docs maven-gallery maven-logs maven-mail maven-mcp maven-memory maven-notes maven-personal maven-preset maven-research maven-sessions maven-signature maven-skills maven-tasks maven-theme maven-webhook
+#compdef maven maven-backup maven-calendar maven-contacts maven-cookbook maven-docs maven-gallery maven-logs maven-mail maven-mcp maven-memory maven-notes maven-personal maven-preset maven-research maven-sessions maven-signature maven-skills maven-tasks maven-theme maven-users maven-webhook
 # Zsh tab-completion for the maven umbrella + sub-CLIs.
 #
 # Drop in any directory on $fpath, e.g.:

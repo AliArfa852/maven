@@ -184,7 +184,7 @@ _print_next_steps() {
     fi
     echo
     echo "After restarting Maven, verify the slim app container sees devices:"
-    echo "  docker compose exec odysseus sh -lc 'test -e /dev/kfd && test -d /dev/dri && ls -l /dev/kfd /dev/dri/renderD*'"
+    echo "  docker compose exec maven sh -lc 'test -e /dev/kfd && test -d /dev/dri && ls -l /dev/kfd /dev/dri/renderD*'"
     echo
     echo "Note: rocm-smi/rocminfo are not expected inside the slim Maven image."
     echo "Device passthrough is necessary but not sufficient for GPU serving; vLLM and"

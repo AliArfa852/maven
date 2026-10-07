@@ -42,6 +42,6 @@ At most one active. See PROTOCOL.md section Sprint.
 - **R3. Favicon PNGs force-added.** `.gitignore:66` ignores `*.png` repo-wide; the existing static/icons PNGs are tracked by force-add. `static/brand/favicon-16.png` and `favicon-32.png` follow the same convention, because index.html links them.
 
 ### Follow-ups (not in S-1)
-- F-1: docker-compose `MAVEN_AI_*` interpolation, after `docker compose config` can be verified. Needs a human with docker.
-- F-2: an image registry name for the fork (CI is human-owned).
+- F-1: DONE 2026-10-07 (main loop). Compose forwards `MAVEN_AI_*` as `${MAVEN_AI_X:-${ODYSSEUS_X:-default}}`, verified with `docker compose config` (v5.6.0); `docker/entrypoint.sh` copies them onto the legacy names in the container. Service renamed `odysseus` → `maven`, `container_name: maven`, image `ghcr.io/aliarfa852/maven`. `docker/local.env.example` is a copy-and-run local template. Not yet run against a live Docker daemon.
+- F-2: the image name is now `ghcr.io/aliarfa852/maven`, but `.github/workflows/docker-publish.yml` (human-owned, denied to agents) uses `${{ github.repository }}` = `AliArfa852/maven`, which GHCR rejects (uppercase). Human edit needed: lowercase it in a step.
 - F-3: migrate the left-alone internals (D-1c-3), if ever wanted.

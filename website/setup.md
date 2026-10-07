@@ -15,8 +15,8 @@ inside **Settings**. Only edit `.env` for deployment-level overrides like
 `APP_BIND`, `APP_PORT`, `AUTH_ENABLED`, `DATABASE_URL`, or a pre-seeded admin password.
 
 On first setup, Odysseus creates an admin account (`admin` unless
-`ODYSSEUS_ADMIN_USER` is set) and prints a temporary password in the terminal.
-For Docker installs, the same line is in `docker compose logs odysseus`.
+`MAVEN_AI_ADMIN_USER` is set) and prints a temporary password in the terminal.
+For Docker installs, the same line is in `docker compose logs maven`.
 Use that for the first login, then change it in **Settings**.
 
 Contributing? See [CONTRIBUTING.md](https://github.com/odysseus-dev/odysseus/blob/dev/CONTRIBUTING.md) for setup, testing, and pull request guidelines.
@@ -43,7 +43,7 @@ Tag scheme:
 For production, pin the immutable tag by overriding the image in `.env` (or the stack's environment variables):
 
 ```bash
-ODYSSEUS_IMAGE=ghcr.io/odysseus-dev/odysseus:1.0.2-7c8070f
+MAVEN_AI_IMAGE=ghcr.io/aliarfa852/maven:1.0.2-7c8070f
 ```
 
 Browse current tags at <https://github.com/odysseus-dev/odysseus/pkgs/container/odysseus>. (Until this package is made public and linked to the repo by an org owner, pulls fall back to the local build automatically — that fallback is intentional.)
@@ -212,7 +212,7 @@ Rebuild and verify the GPU inside the Odysseus container:
 
 ```bash
 docker compose up -d --build
-docker compose exec odysseus nvidia-smi -L
+docker compose exec maven nvidia-smi -L
 ```
 
 For first-time local model testing on 8 GB laptop GPUs, start with GGUF/Q4 models on llama.cpp before trying GPTQ/AWQ models on vLLM or SGLang. This keeps the first run simpler while confirming GPU passthrough works.
@@ -295,8 +295,8 @@ source of truth; the standalone files mirror them for single-file deployments.
 Verify after enabling either overlay:
 
 ```bash
-docker compose exec odysseus nvidia-smi -L   # NVIDIA
-docker compose exec odysseus sh -lc 'test -e /dev/kfd && test -d /dev/dri && ls -l /dev/kfd /dev/dri/renderD*'  # AMD
+docker compose exec maven nvidia-smi -L   # NVIDIA
+docker compose exec maven sh -lc 'test -e /dev/kfd && test -d /dev/dri && ls -l /dev/kfd /dev/dri/renderD*'  # AMD
 ```
 
 > **GPU passthrough ≠ llama.cpp CUDA.** `nvidia-smi` passing inside the
@@ -362,8 +362,8 @@ to the Auto heuristic.
 
 ```bash
 docker compose ps
-docker compose logs --tail=120 odysseus
-docker compose logs odysseus | grep -E 'ChromaDB|MemoryVectorStore|DEGRADED'
+docker compose logs --tail=120 maven
+docker compose logs maven | grep -E 'ChromaDB|MemoryVectorStore|DEGRADED'
 ```
 
 **macOS details.** `start-macos.sh` installs Homebrew deps, creates the venv,
@@ -725,14 +725,14 @@ Key settings:
 | `CHROMADB_HOST` | `localhost` | ChromaDB host for vector memory. Docker overrides this to `chromadb`. |
 | `CHROMADB_PORT` | `8100` | ChromaDB port for manual host runs. Docker overrides this to `8000`. |
 | `EMBEDDING_URL` | -- | OpenAI-compatible embeddings endpoint |
-| `ODYSSEUS_CHAT_UPLOAD_MAX_BYTES` | `10485760` | Chat/agent attachment cap in bytes. Raise for larger local PDFs or text documents. |
-| `ODYSSEUS_GALLERY_UPLOAD_MAX_BYTES` | `104857600` | Gallery image upload cap in bytes (100 MB). |
-| `ODYSSEUS_GALLERY_TRANSFORM_UPLOAD_MAX_BYTES` | `26214400` | Gallery transform input cap in bytes (25 MB). |
-| `ODYSSEUS_MEMORY_IMPORT_MAX_BYTES` | `10485760` | Memory import file cap in bytes (10 MB). |
-| `ODYSSEUS_PERSONAL_UPLOAD_MAX_BYTES` | `26214400` | Personal document upload cap in bytes (25 MB). |
-| `ODYSSEUS_EMAIL_COMPOSE_UPLOAD_MAX_BYTES` | `26214400` | Email compose attachment cap in bytes (25 MB). |
-| `ODYSSEUS_STT_MAX_AUDIO_BYTES` | `26214400` | Speech-to-text audio cap in bytes (25 MB). |
-| `ODYSSEUS_ICS_MAX_BYTES` | `10485760` | Calendar `.ics` import cap in bytes (10 MB). |
+| `MAVEN_AI_CHAT_UPLOAD_MAX_BYTES` | `10485760` | Chat/agent attachment cap in bytes. Raise for larger local PDFs or text documents. |
+| `MAVEN_AI_GALLERY_UPLOAD_MAX_BYTES` | `104857600` | Gallery image upload cap in bytes (100 MB). |
+| `MAVEN_AI_GALLERY_TRANSFORM_UPLOAD_MAX_BYTES` | `26214400` | Gallery transform input cap in bytes (25 MB). |
+| `MAVEN_AI_MEMORY_IMPORT_MAX_BYTES` | `10485760` | Memory import file cap in bytes (10 MB). |
+| `MAVEN_AI_PERSONAL_UPLOAD_MAX_BYTES` | `26214400` | Personal document upload cap in bytes (25 MB). |
+| `MAVEN_AI_EMAIL_COMPOSE_UPLOAD_MAX_BYTES` | `26214400` | Email compose attachment cap in bytes (25 MB). |
+| `MAVEN_AI_STT_MAX_AUDIO_BYTES` | `26214400` | Speech-to-text audio cap in bytes (25 MB). |
+| `MAVEN_AI_ICS_MAX_BYTES` | `10485760` | Calendar `.ics` import cap in bytes (10 MB). |
 
 All upload-limit vars are validated (must be a positive integer) and optional; an invalid value fails fast at startup.
 

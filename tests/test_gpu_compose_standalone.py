@@ -24,7 +24,7 @@ HOST_DOCKER_OVERLAY = ROOT / "docker" / "host-docker.yml"
 NVIDIA_STANDALONE = ROOT / "docker-compose.gpu-nvidia.yml"
 AMD_STANDALONE = ROOT / "docker-compose.gpu-amd.yml"
 
-SERVICE = "odysseus"
+SERVICE = "maven"
 
 
 def _load(path: Path) -> dict:
@@ -163,7 +163,7 @@ def test_base_has_no_host_docker_access(base):
     service = base["services"][SERVICE]
 
     assert "/var/run/docker.sock:/var/run/docker.sock" not in service["volumes"]
-    assert "ODYSSEUS_ENABLE_HOST_DOCKER=true" not in service["environment"]
+    assert "MAVEN_AI_ENABLE_HOST_DOCKER=true" not in service["environment"]
     assert "group_add" not in service
 
 
@@ -172,7 +172,7 @@ def test_base_plus_host_docker_overlay_has_explicit_access(base):
     service = merged["services"][SERVICE]
 
     assert "/var/run/docker.sock:/var/run/docker.sock" in service["volumes"]
-    assert "ODYSSEUS_ENABLE_HOST_DOCKER=true" in service["environment"]
+    assert "MAVEN_AI_ENABLE_HOST_DOCKER=true" in service["environment"]
     assert service["group_add"] == ["${DOCKER_GID:-963}"]
 
 
@@ -189,7 +189,7 @@ def test_nvidia_plus_host_docker_preserves_gpu_and_docker_access(base):
         {"driver": "nvidia", "count": "all", "capabilities": ["gpu"]}
     ]
     assert "/var/run/docker.sock:/var/run/docker.sock" in service["volumes"]
-    assert "ODYSSEUS_ENABLE_HOST_DOCKER=true" in service["environment"]
+    assert "MAVEN_AI_ENABLE_HOST_DOCKER=true" in service["environment"]
     assert service["group_add"] == ["${DOCKER_GID:-963}"]
 
 
@@ -208,4 +208,4 @@ def test_amd_plus_host_docker_preserves_gpu_and_docker_groups(base):
         "${DOCKER_GID:-963}",
     ]
     assert "/var/run/docker.sock:/var/run/docker.sock" in service["volumes"]
-    assert "ODYSSEUS_ENABLE_HOST_DOCKER=true" in service["environment"]
+    assert "MAVEN_AI_ENABLE_HOST_DOCKER=true" in service["environment"]

@@ -672,7 +672,63 @@ class AuthManager:
         username = username.strip().lower()
         if username not in self.users:
             return False
-        return _verify_password(password, self.users[username]["password_hash"])
+        stored = (self.users[username] or {}).get("password_hash")
+        try:
+            return _verify_password(password, stored)
+        except (AttributeError, TypeError, ValueError):
+            # A missing or non-bcrypt hash (hand-edited or damaged auth.json)
+            # used to raise here and turn every login into a 500. Fail closed
+            # and say how to recover; never log the stored value.
+            logger.error(
+                "Account '%s' has no valid password hash in %s; login refused. "
+                "Reset it with: python scripts/maven-users reset-password %s",
+                username, self.auth_path, username,
+            )
+            return False
+
+    def account_problems(self) -> List[Dict[str, str]]:
+        """Users whose stored record cannot be logged into (for maven-users check)."""
+        problems = []
+        for username, user in self.users.items():
+            stored = (user or {}).get("password_hash") if isinstance(user, dict) else None
+            ok = isinstance(stored, str) and stored.startswith(("$2a$", "$2b$", "$2y$"))
+            if not ok:
+                problems.append({"username": username, "problem": "missing or invalid password hash"})
+        return problems
+
+    def grant_admin_local(self, username: str) -> bool:
+        """Make a user an admin without a requesting admin.
+
+        Server-side recovery only (scripts/maven-users), for an install left
+        with no working admin. No HTTP route reaches this.
+        """
+        username = (username or "").strip().lower()
+        with self._config_lock:
+            target = self._config.get("users", {}).get(username)
+            if target is None:
+                return False
+            self._apply_admin_flag_locked(target, True)
+            self._save()
+        logger.info("Admin granted to '%s' from the server command line", username)
+        return True
+
+    def reset_password(self, username: str, new_password: str) -> bool:
+        """Set a new password without the old one and sign the user out everywhere.
+
+        Server-side recovery only (scripts/maven-users): there is no HTTP
+        route to this, because it skips the current-password check.
+        """
+        username = (username or "").strip().lower()
+        if len(new_password or "") < PASSWORD_MIN_LENGTH:
+            return False
+        with self._config_lock:
+            if username not in self.users:
+                return False
+            self._config["users"][username]["password_hash"] = _hash_password(new_password)
+            self._save()
+        self.revoke_user_sessions(username)
+        logger.info("Password reset for '%s' from the server command line", username)
+        return True
 
     def create_session(self, username: str, password: str) -> Optional[str]:
         """Verify credentials and return a session token, or None."""

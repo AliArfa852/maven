@@ -26,7 +26,7 @@ def _env_example():
 
 def _odysseus_environment(path):
     compose = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return set(compose["services"]["odysseus"]["environment"])
+    return set(compose["services"]["maven"]["environment"])
 
 
 @pytest.mark.parametrize(

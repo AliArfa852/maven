@@ -54,7 +54,7 @@ For Docker-related changes:
 ```bash
 docker compose config
 docker compose up -d --build
-docker compose logs --tail=120 odysseus
+docker compose logs --tail=120 maven
 ```
 
 Mention what you ran in the pull request description. If you could not run a check, say so.

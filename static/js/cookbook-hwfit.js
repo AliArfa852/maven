@@ -1043,9 +1043,9 @@ function _renderHwVisibilityWarning(sys) {
       `cpu_name=${sys?.cpu_name || ''}`,
       '',
       'Useful checks:',
-      'docker compose exec odysseus nvidia-smi -L',
-      'docker compose exec odysseus cat /proc/meminfo | head',
-      'docker compose exec odysseus python -c "from services.hwfit.hardware import detect_system; import json; print(json.dumps(detect_system(fresh=True), indent=2))"',
+      'docker compose exec maven nvidia-smi -L',
+      'docker compose exec maven cat /proc/meminfo | head',
+      'docker compose exec maven python -c "from services.hwfit.hardware import detect_system; import json; print(json.dumps(detect_system(fresh=True), indent=2))"',
     ].join('\n');
 
     _copyText(text);

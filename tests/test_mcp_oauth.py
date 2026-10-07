@@ -229,7 +229,7 @@ def test_redirect_base_override_is_forwarded_into_the_container():
     for name in _COMPOSE_FILES:
         path = _repo_root() / name
         compose = yaml.safe_load(path.read_text(encoding="utf-8"))
-        environment = set(compose["services"]["odysseus"]["environment"])
+        environment = set(compose["services"]["maven"]["environment"])
         assert "OAUTH_REDIRECT_BASE_URL=${OAUTH_REDIRECT_BASE_URL:-}" in environment, name
 
 

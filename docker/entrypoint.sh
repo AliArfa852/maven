@@ -11,6 +11,15 @@
 # as that user via gosu.
 set -e
 
+# MAVEN_AI_* are the documented settings names; parts of the app and this
+# script still read the legacy ODYSSEUS_* names. Copy each MAVEN_AI_ value
+# onto its legacy twin so both names hold it (the new name wins). Names are
+# limited to [A-Za-z0-9_], so the eval only ever expands a variable.
+for _maven_name in $(env | sed -n 's/^MAVEN_AI_\([A-Za-z0-9_]*\)=.*/\1/p'); do
+  eval "export ODYSSEUS_${_maven_name}=\"\${MAVEN_AI_${_maven_name}}\""
+done
+unset _maven_name
+
 PUID="${PUID:-1000}"
 PGID="${PGID:-1000}"
 GOSU_BIN="$(command -v gosu)"
