@@ -1,0 +1,80 @@
+{
+  "id": "20261004T111558329292Z",
+  "created": "20261004T111558329292Z",
+  "complete": true,
+  "git": {
+    "head": "12f5967c853521499c0a26401e55aa75f08cc8e4",
+    "branch": "dev",
+    "snapshot_commit": "12f5967c853521499c0a26401e55aa75f08cc8e4",
+    "dirty": false,
+    "ref": "refs/loop-snapshots/20261004T111558329292Z",
+    "untracked": []
+  },
+  "fleet": [
+    "agents/OWNERSHIP.txt",
+    "agents/README.md",
+    "agents/agent-core.md",
+    "agents/chat-core.md",
+    "agents/decision-broker.md",
+    "agents/docs-keeper.md",
+    "agents/git-manager.md",
+    "agents/health-check.md",
+    "agents/inference-core.md",
+    "agents/orchestrator.md",
+    "agents/secrets-auditor.md",
+    "agents/security-core.md",
+    "agents/self-review.md",
+    "agents/triage-reporter.md",
+    "agents/verification-gate.md",
+    "agents/workspace-apps.md",
+    "commands/loop-status.md",
+    "commands/loop-tick.md",
+    "commands/sprint.md",
+    "loop/BACKLOG.md",
+    "loop/DECISIONS-PENDING.md",
+    "loop/DONE.md",
+    "loop/MAVEN_PLAN.md",
+    "loop/PROTOCOL.md",
+    "loop/QUEUE.md",
+    "loop/SPRINTS.md",
+    "loop/TICK",
+    "loop/gate-baseline.proposed.txt",
+    "loop/memory/README.md",
+    "loop/memory/agent-core.md",
+    "loop/memory/chat-core.md",
+    "loop/memory/decision-broker.md",
+    "loop/memory/docs-keeper.md",
+    "loop/memory/git-manager.md",
+    "loop/memory/health-check.md",
+    "loop/memory/inference-core.md",
+    "loop/memory/orchestrator.md",
+    "loop/memory/secrets-auditor.md",
+    "loop/memory/security-core.md",
+    "loop/memory/self-review.md",
+    "loop/memory/triage-reporter.md",
+    "loop/memory/verification-gate.md",
+    "loop/memory/workspace-apps.md",
+    "scheduled_tasks.lock",
+    "settings.json"
+  ],
+  "data": {
+    "path": "C:\\Users\\aliar\\OneDrive\\Documents\\projects\\maven\\data",
+    "exists": true,
+    "sqlite": {
+      "scheduled_emails.db": {
+        "sha256": "9bd9fee03116a0a68a12e31ce8fc0c3830ced70d1c7387e19715716ac69d4c51",
+        "integrity": "ok"
+      }
+    },
+    "files": {
+      ".app_key": "4c6be6f94b8ac622b927591d8c5a62dd7c7add3157f40a6c69c1166bdc557368",
+      "auth.json": "0486c8986933d52e8227832dda491d0c768a0bcb8c94a7374b37a8c318b6f209",
+      "logs/app.log": "2cf5ea03c781c691557d9da468b2f3984c7936e7b022bbc2ba766fee372845a8",
+      "logs/search_engine_error.log": "130d71979e9b4576e18a3b947e021c0ff1ead6abed84a48d65790ae325d20b7d",
+      "memory.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "presets.json": "113910abff24a3661a49a46ec3657e3b83da64cad8934a01e3687a96e3fcb733"
+    },
+    "skipped": [],
+    "bytes": 206003
+  }
+}
