@@ -51,6 +51,10 @@ def _chunks(text: str):
         if end >= n:
             break
         start = max(start + 1, end - (CHUNK_CHARS - CHUNK_STEP))
+        # Begin the next window on a word, not mid-word.
+        space = text.find(" ", start, start + 40)
+        if space != -1:
+            start = space + 1
 
 
 def _session_documents(session_id: str, owner: str | None):

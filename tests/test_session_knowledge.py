@@ -119,3 +119,28 @@ def test_earlier_attachments_keep_the_tool_in_reach(chat_docs):
     sid, _ = chat_docs
     assert agent_loop._session_has_documents(sid, "alice") is True
     assert agent_loop._session_has_documents(sid, "bob") is False
+
+
+def test_windows_start_on_a_word():
+    text = " ".join(f"w{i:04d}" for i in range(2000))
+    for offset, chunk in session_knowledge._chunks(text):
+        assert offset == 0 or text[offset - 1] == " ", chunk[:20]
+
+
+def test_office_attachment_document_is_titled_after_the_users_file_name(tmp_path, monkeypatch):
+    """The stored file is named by its upload id; the document must carry the real name."""
+    from docx import Document as Docx
+
+    import src.office_doc as office_doc
+    from src import document_processor
+
+    path = tmp_path / "8b004626e5dc4d96bf4d6a9af259bd5d.docx"
+    d = Docx()
+    d.add_paragraph("Termination notice is ninety days.")
+    d.save(path)
+    seen = {}
+    monkeypatch.setattr(office_doc, "create_office_document",
+                        lambda **kw: seen.update(kw) or "doc-1")
+    document_processor._process_office_document(str(path), "Supplier contract.docx", session_id="s1", owner="alice")
+    assert seen["title"] == "Supplier contract"
+    assert seen["upload_id"] == path.name
