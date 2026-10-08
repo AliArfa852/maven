@@ -131,11 +131,20 @@ def _verify_session_owner(request: Request, session_id: str, session_manager=Non
 
 logger = logging.getLogger(__name__)
 
+# Settings template for the router setup_session_routes() builds. Each call
+# gets a fresh router with these settings: routes added to one shared router
+# piled up across calls, so a second setup matched the first call's handlers.
 router = APIRouter(
     prefix="/api",
     tags=["sessions"],
     dependencies=[Depends(require_chat_api_token_scope)],
 )
+
+
+def _new_router() -> APIRouter:
+    template = globals()["router"]
+    return APIRouter(prefix=template.prefix, tags=list(template.tags or []),
+                     dependencies=list(template.dependencies or []))
 
 def _current_user_is_admin(request: Request, user: str | None) -> bool:
     if is_delegated_credential(request):
@@ -241,6 +250,7 @@ def setup_session_routes(
     upload_handler=None,
 ):
     """Setup session routes with the provided manager and config"""
+    router = _new_router()
 
     REQUEST_TIMEOUT = config.get("REQUEST_TIMEOUT", 20)
     SESSION_MODEL_VALIDATION_TIMEOUT = min(float(REQUEST_TIMEOUT or 20), 3.0)
