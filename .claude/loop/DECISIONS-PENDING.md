@@ -129,6 +129,13 @@ Keep `X-Odysseus-Internal-Token` (L49) unchanged; it is a real header name (D-1c
 options: A) apply the SECURITY/THREAT_MODEL lines now and leave website/specs/.github for later (recommended, because those two are what a security reviewer reads); B) leave all until later.
 
 
+### D-3-1  Approval prompt on every file creation (main loop, 2026-10-08)
+kind: security trade-off
+
+context: An end-to-end run showed that `create_file` (and any other tool that writes) always asks "Allow this task to continue?" on the first use in a chat. The reason: MCP tool descriptions go into the prompt as untrusted context, and since upstream commit 2811c7e ("keep ambient context fail closed") that context arms the approval gate. The built-in browser MCP server is enough to trigger it, so this happens on every default install. People can choose "Allow for this chat session" to be asked once per chat.
+
+options: A) keep as is: safest, one click per chat (recommended for now); B) treat descriptions from Maven's own built-in MCP servers as trusted, and keep third-party servers fail-closed. This removes the prompt for normal use but needs a reliable "built-in" marker that a third-party server cannot fake; C) per-company setting for admins.
+
 ### D-0-5  Promote the gate baseline and commit the fleet scripts (Phase 0)
 kind: dependency (loop setup)
 
