@@ -195,6 +195,7 @@ This is the user's own memories, owner-scoped. No change apart from adding label
 - **Dependencies:** move document extraction from optional to standard in the corporate build. Verify every library's license and record it in ACKNOWLEDGMENTS.
 
 ### 5.2 Data analysis (R15)
+- **Built 2026-10-08 (step 1, no sandbox needed):** `analyze_data` agent tool (`src/data_analysis.py`): describe / filter / group-by (date buckets month, quarter, year) with sum, mean, count, min, max, median / top-N over the caller's own .xlsx or .csv upload (owner-checked, never the admin override); messy business numbers parsed; defaults to the newest spreadsheet in the chat. Fixed operations, no code execution, so open to every role. The sandboxed pandas runtime below is still needed for free-form analysis.
 - **Sandbox:** a separate container with no network, a read-only input mount, CPU/RAM/time limits and a seccomp profile, running pandas, numpy and statsmodels. Small jobs can run in the browser with Pyodide instead. Never use the host Python tool. **[DECIDE D-2-6: container sandbox (recommended) vs Pyodide only]**
 - **Flow:** profile the data (code, not the model) → the model writes analysis code → the sandbox runs it → the result is shown with the code ("show work") → the numbers in the answer come only from the result.
 - **Finance helpers:** period-over-period, variance, budget vs actual, ratios, currency and number formatting, and reconciliation checks (totals must add up, or Maven says why they don't).

@@ -60,3 +60,76 @@ class SearchChatFilesTool:
         passages = await asyncio.to_thread(
             session_knowledge.search, session_id, ctx.get("owner"), query, args.get("k") or 5)
         return {"response": session_knowledge.format_results(passages, query), "exit_code": 0}
+
+
+TABLE_EXTENSIONS = (".xlsx", ".xlsm", ".csv", ".tsv")
+
+
+def latest_table_upload(session_id: str, owner) -> str | None:
+    """Id of the newest spreadsheet attached to this chat by this user."""
+    import json as _json
+
+    from core.database import ChatMessage, Session, SessionLocal
+    from src.attachment_refs import attachment_refs_from_metadata
+
+    db = SessionLocal()
+    try:
+        sess = db.query(Session.owner).filter(Session.id == session_id).first()
+        if sess is None or sess[0] != owner:
+            return None
+        rows = (db.query(ChatMessage.meta_data)
+                .filter(ChatMessage.session_id == session_id, ChatMessage.role == "user",
+                        ChatMessage.meta_data.isnot(None))
+                .order_by(ChatMessage.timestamp.desc()).limit(200).all())
+    finally:
+        db.close()
+    for (raw,) in rows:
+        try:
+            meta = _json.loads(raw) if isinstance(raw, str) else (raw or {})
+        except ValueError:
+            continue
+        for ref in reversed(attachment_refs_from_metadata(meta if isinstance(meta, dict) else {})):
+            name = str(ref.get("name") or ref.get("attachment_id") or "").lower()
+            if name.endswith(TABLE_EXTENSIONS) or str(ref.get("attachment_id", "")).lower().endswith(TABLE_EXTENSIONS):
+                return ref["attachment_id"]
+    return None
+
+
+class AnalyzeDataTool:
+    """analyze_data: exact figures from the user's own Excel/CSV upload (src/data_analysis.py)."""
+
+    async def execute(self, content: str, ctx: dict) -> Dict:
+        from src import data_analysis
+        from src.tool_utils import get_upload_handler
+
+        try:
+            args = _parse_tool_args(content)
+        except ValueError:
+            return {"error": "Invalid JSON arguments", "exit_code": 1}
+        file_id = str(args.get("file_id") or args.get("upload_id") or args.get("id") or "").strip()
+        if not file_id and ctx.get("session_id"):
+            file_id = await asyncio.to_thread(latest_table_upload, ctx["session_id"], ctx.get("owner")) or ""
+        if not file_id:
+            return {"error": "Need file_id: the id of an uploaded .xlsx or .csv file "
+                             "(listed under 'Uploaded files attached'). No spreadsheet is attached "
+                             "to this chat yet.", "exit_code": 1}
+        handler = get_upload_handler()
+        if handler is None:
+            return {"error": "File storage is not ready", "exit_code": 1}
+        # Strictly the caller's own uploads: no admin override for agent reads.
+        info = await asyncio.to_thread(handler.resolve_upload, file_id, owner=ctx.get("owner"), allow_admin=False)
+        if not info or not info.get("path"):
+            return {"error": f"No uploaded file '{file_id}' that you can read", "exit_code": 1}
+
+        def work():
+            table = data_analysis.load_table(info["path"], info.get("name") or info.get("original_name") or "",
+                                             args.get("sheet"), args.get("header_row") or 1)
+            return data_analysis.run(table, args)
+
+        try:
+            result = await asyncio.to_thread(work)
+        except data_analysis.AnalysisError as e:
+            return {"error": str(e), "exit_code": 1}
+        except Exception as e:
+            return {"error": f"Could not read the file: {e}", "exit_code": 1}
+        return {"response": data_analysis.to_markdown(result), "result": result, "exit_code": 0}

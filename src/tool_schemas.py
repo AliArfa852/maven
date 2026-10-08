@@ -823,6 +823,31 @@ FUNCTION_TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "analyze_data",
+            "description": "Compute exact numbers from an uploaded Excel (.xlsx) or CSV file instead of estimating from the preview: describe the columns, filter rows, group by columns (date columns can be bucketed with ':month', ':quarter', ':year') with sum/mean/count/min/max/median, or list the top N rows. Leave file_id empty to use the newest spreadsheet in this chat. Use the result as the source for any figures, tables or charts you give.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "Upload id of the .xlsx/.csv (from 'Uploaded files attached'); empty = newest spreadsheet in this chat"},
+                    "sheet": {"type": "string", "description": "Excel sheet name (default: first sheet)"},
+                    "header_row": {"type": "integer", "description": "Row number holding the column names (default 1)"},
+                    "operation": {"type": "string", "enum": ["describe", "group", "top", "rows"], "description": "describe = columns and summary stats; group = group_by + aggregates; top = biggest/smallest rows by sort_by; rows = matching rows"},
+                    "where": {"type": "array", "description": "Filters applied first", "items": {"type": "object", "properties": {"column": {"type": "string"}, "op": {"type": "string", "enum": ["=", "!=", ">", ">=", "<", "<=", "contains", "not contains"]}, "value": {}}}},
+                    "group_by": {"type": "array", "items": {"type": "string"}, "description": "Columns to group by, e.g. [\"Region\"] or [\"Date:month\"]"},
+                    "aggregates": {"type": "array", "description": "For group", "items": {"type": "object", "properties": {"column": {"type": "string"}, "fn": {"type": "string", "enum": ["sum", "mean", "count", "min", "max", "median"]}}}},
+                    "sort": {"type": "string", "description": "For group: output column to sort by (default first aggregate; date buckets sort by time)"},
+                    "sort_by": {"type": "string", "description": "For top: numeric column to rank by"},
+                    "descending": {"type": "boolean", "description": "Default true"},
+                    "columns": {"type": "array", "items": {"type": "string"}, "description": "For top/rows: columns to show"},
+                    "limit": {"type": "integer", "description": "Max rows returned (default 50 for group/rows, 10 for top; at most 200)"}
+                },
+                "required": ["operation"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_chat_files",
             "description": "Search the files and documents attached to THIS chat for passages about a question. Use when the user asks about an attached file that was too long to read in full (it says truncated or omitted), or to find where a long document mentions something. Returns the best passages with the document id and character offset.",
             "parameters": {
@@ -1619,7 +1644,7 @@ def function_call_to_tool_block(name: str, arguments: str) -> Optional[ToolBlock
             content = action
     elif tool_type in ("manage_tasks", "manage_skills", "api_call",
                         "manage_endpoints", "manage_mcp", "manage_webhooks",
-                        "manage_tokens", "manage_documents", "manage_settings", "search_chat_files"):
+                        "manage_tokens", "manage_documents", "manage_settings", "search_chat_files", "analyze_data"):
         content = json.dumps(args)
     elif tool_type == "ask_teacher":
         content = args.get("model", "auto") + "\n" + args.get("problem", "")

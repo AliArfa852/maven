@@ -90,6 +90,7 @@ NON_ADMIN_BLOCKED_TOOLS = BUILTIN_EMAIL_TOOLS | {
 # (read_file, grep, glob, ls) instead of freestyle shell.
 PLAN_MODE_READONLY_TOOLS = {
     "search_chat_files",
+    "analyze_data",
     "read_file",
     "grep",
     "glob",

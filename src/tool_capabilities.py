@@ -119,6 +119,7 @@ _register(
         "search_chats",
         "search_emails",
         "search_chat_files",
+        "analyze_data",
         "list_sessions",
         "tail_serve_output",
         "vault_get",

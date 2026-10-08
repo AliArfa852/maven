@@ -113,6 +113,15 @@ Attach files to a message (paperclip, or drag and drop) and ask about them:
 | PDF | Text (form filling needs the optional extras in the setup guide) |
 | CSV, Markdown, text, code | As is |
 
+**Numbers from a spreadsheet.** In **Agent** mode, questions like "total
+revenue by region", "spend per month", "average deal size for Q3" or "the ten
+biggest invoices" are answered by calculating them from the whole sheet, not
+estimated from the part the model can see. Maven can group by any column,
+group dates by month, quarter or year, filter rows, and pick the top N. It
+reads numbers like `1,234.50`, `1.234,50`, `$1,200`, `(500)` and `12%`
+correctly. Ask for a chart of the result and it goes straight into a file
+([§6](#6-create-files-and-charts)). Only your own uploads can be read.
+
 **Long files.** Only the first part of a long file fits in the message the model
 reads, but the full text is saved as a document in the chat. In **Agent**
 mode, ask about any part of it ("what does the contract say about
