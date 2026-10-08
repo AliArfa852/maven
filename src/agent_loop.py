@@ -1438,6 +1438,10 @@ def _classify_agent_request(messages: List[Dict], last_user: str) -> Dict[str, o
     )
     if has(r"\b(documents?|docs?|draft|compose|poem|story|essay|outline|letter|edit|rewrite|proofread|suggest|feedback|review this|make a file)\b"):
         domains.add("documents")
+    # File creation (create_file): office formats and the things people put in them.
+    if has(r"\b(excel|spreadsheets?|xlsx|csv|word doc(?:ument)?|docx|powerpoint|pptx|slides?|"
+           r"slide ?deck|deck|presentations?|pdfs?|reports?|charts?|graphs?)\b"):
+        domains.add("documents")
     if "notes_calendar_tasks" not in domains and has(r"\bwrite\b"):
         domains.add("documents")
     if has(r"\b(search|web|google|look up|latest|news|current|weather|forecast|stock price|price of|website|url|https?://|www\.)\b"):
