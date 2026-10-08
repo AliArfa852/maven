@@ -3,7 +3,7 @@ import os
 import re
 import json
 import logging
-from typing import List, Dict, Set, Any, Tuple
+from typing import List, Dict, Set, Any, Optional, Tuple
 from dataclasses import dataclass
 
 from src.index_walk import prune_index_dirs, is_indexable_file
@@ -162,7 +162,7 @@ def retrieve_personal_keyword(personal_index: List[Dict], query: str, k: int = 5
     return out
 
 def retrieve_personal(personal_index: List[Dict], query: str, k: int = 5,
-                     rag_manager=None) -> List[str]:
+                     rag_manager=None, owner: Optional[str] = None) -> List[str]:
     """
     Retrieve relevant personal documents using vector search first, falling back to keyword search.
 
@@ -171,6 +171,8 @@ def retrieve_personal(personal_index: List[Dict], query: str, k: int = 5,
         query: The search query
         k: Number of results to return
         rag_manager: Optional RAGManager instance for vector search
+        owner: Whose documents to search. Pass it whenever auth is on:
+            without it the vector search covers every user's documents.
 
     Returns:
         List of formatted search results
@@ -181,7 +183,7 @@ def retrieve_personal(personal_index: List[Dict], query: str, k: int = 5,
     # First try vector search if RAGManager is available
     if rag_manager:
         try:
-            vector_results = rag_manager.search(query, k)
+            vector_results = rag_manager.search(query, k, owner=owner)
             if vector_results:
                 # Format vector results
                 out = []
@@ -415,9 +417,9 @@ class PersonalDocsManager:
 
         logger.info(f"Refreshed index: {len(self.index)} documents from {len(self.indexed_directories) + 1} directories")
 
-    def retrieve(self, query: str, k: int = 5) -> List[str]:
-        """Retrieve relevant documents for a query."""
-        return retrieve_personal(self.index, query, k, self.rag_manager)
+    def retrieve(self, query: str, k: int = 5, owner: Optional[str] = None) -> List[str]:
+        """Retrieve relevant documents for a query (``owner``: see retrieve_personal)."""
+        return retrieve_personal(self.index, query, k, self.rag_manager, owner=owner)
 
     def get_file_list(self) -> List[Dict[str, Any]]:
         """Get list of indexed files with metadata."""

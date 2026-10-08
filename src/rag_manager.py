@@ -49,9 +49,9 @@ class RAGManager:
             owner=owner,
         )
     
-    def retrieve(self, query: str, k: int = 5) -> List[str]:
+    def retrieve(self, query: str, k: int = 5, owner: Optional[str] = None) -> List[str]:
         """Retrieve relevant chunks - delegates to VectorRAG."""
-        return self.vector_rag.retrieve(query, k)
+        return self.vector_rag.retrieve(query, k, owner=owner)
     
     def rebuild_index(self) -> bool:
         """Rebuild index - delegates to VectorRAG."""
