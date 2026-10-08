@@ -124,6 +124,11 @@ class AuthManager:
         # Guards the first-run setup check-and-write so concurrent requests
         # cannot both observe is_configured==False and both create admin accounts.
         self._setup_lock = threading.Lock()
+        # auth.json can change under a running server (scripts/maven-users
+        # reset-password / make-admin). Remember what we loaded or wrote so
+        # an outside change is picked up on the next login check.
+        self._auth_mtime: Optional[int] = None
+        self._auth_checked_at = 0.0
         self._load()
         self._load_sessions()
         self._migrate_single_user()
@@ -145,6 +150,7 @@ class AuthManager:
                         for k, v in self._config["users"].items()
                     }
                 logger.info("Auth config loaded")
+                self._auth_mtime = os.stat(self.auth_path).st_mtime_ns
             else:
                 self._config = {}
                 logger.info("No auth config found — first-run setup required")
@@ -239,6 +245,36 @@ class AuthManager:
 
     def _save(self):
         _atomic_write_json(self.auth_path, self._config, indent=2)
+        try:
+            self._auth_mtime = os.stat(self.auth_path).st_mtime_ns
+        except OSError:
+            pass
+
+    def _reload_if_changed(self) -> None:
+        """Pick up auth.json edits made outside this process (at most once a second).
+
+        Call only from entry points that do not hold _config_lock.
+        """
+        now = time.time()
+        if now - self._auth_checked_at < 1.0:
+            return
+        self._auth_checked_at = now
+        try:
+            mtime = os.stat(self.auth_path).st_mtime_ns
+        except OSError:
+            return
+        if mtime == self._auth_mtime:
+            return
+        with self._config_lock:
+            self._load()
+        logger.info("auth.json changed on disk; reloaded accounts")
+
+    def _session_revoked(self, session: Dict[str, Any]) -> bool:
+        """True when the user's sessions were revoked after this one began
+        (e.g. a command-line password reset in another process)."""
+        user = self.users.get(session.get("username")) or {}
+        cutoff = user.get("sessions_valid_after")
+        return bool(cutoff) and float(session.get("created") or 0) < float(cutoff)
 
     @property
     def users(self) -> Dict[str, Any]:
@@ -679,6 +715,7 @@ class AuthManager:
 
     def verify_password(self, username: str, password: str) -> bool:
         username = username.strip().lower()
+        self._reload_if_changed()
         if username not in self.users:
             return False
         stored = (self.users[username] or {}).get("password_hash")
@@ -734,6 +771,9 @@ class AuthManager:
             if username not in self.users:
                 return False
             self._config["users"][username]["password_hash"] = _hash_password(new_password)
+            # A server running in another process keeps its own copy of the
+            # sessions; this marker makes it drop them too.
+            self._config["users"][username]["sessions_valid_after"] = time.time()
             self._save()
         self.revoke_user_sessions(username)
         logger.info("Password reset for '%s' from the server command line", username)
@@ -759,6 +799,7 @@ class AuthManager:
                 self._sessions[token] = {
                     "username": username,
                     "expiry": time.time() + TOKEN_TTL,
+                    "created": time.time(),
                 }
         self._save_sessions()
         return token
@@ -766,6 +807,7 @@ class AuthManager:
     def validate_token(self, token: Optional[str]) -> bool:
         if not token:
             return False
+        self._reload_if_changed()
         expired = False
         deleted_user = False
         with self._sessions_lock:
@@ -780,7 +822,7 @@ class AuthManager:
                 # deleted them while their cookie was still valid), drop the
                 # session so the next request kicks them out instead of
                 # silently authenticating against a non-existent account.
-                if session.get("username") not in self.users:
+                if session.get("username") not in self.users or self._session_revoked(session):
                     self._sessions.pop(token, None)
                     deleted_user = True
         if expired or deleted_user:
@@ -792,6 +834,7 @@ class AuthManager:
         """Return the username associated with a valid token."""
         if not token:
             return None
+        self._reload_if_changed()
         expired = False
         deleted_user = False
         with self._sessions_lock:
@@ -804,7 +847,7 @@ class AuthManager:
             else:
                 _u = session["username"]
                 # SECURITY: orphan check — same rationale as validate_token.
-                if _u not in self.users:
+                if _u not in self.users or self._session_revoked(session):
                     self._sessions.pop(token, None)
                     deleted_user = True
                 else:

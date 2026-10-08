@@ -72,6 +72,7 @@ function renderUsers(users, catalogue, canManage, me) {
         box.checked = user.roles.includes(role.id);
         // Everyone holds Basic; it cannot be removed.
         if (role.id === 'basic') { box.checked = true; box.disabled = true; }
+        box.dataset.initial = box.checked ? '1' : '0';
         boxes.push(box);
         label.append(box, document.createTextNode(role.label));
         rolesCell.append(label);
@@ -89,6 +90,7 @@ function renderUsers(users, catalogue, canManage, me) {
         select.append(opt);
       }
       select.value = user.clearance_override || '';
+      select.dataset.initial = select.value;
       clearanceCell.append(select);
 
       const save = node('button', 'Save');
@@ -112,12 +114,24 @@ async function saveUser(username, boxes, select, button) {
     const roles = boxes.filter((b) => b.checked).map((b) => b.value);
     const enc = encodeURIComponent(username);
     const json = { 'Content-Type': 'application/json' };
-    const r = await api(`/api/auth/users/${enc}/roles`, {
-      method: 'PUT', headers: json, body: JSON.stringify({ roles }),
-    });
-    await api(`/api/auth/users/${enc}/clearance`, {
-      method: 'PUT', headers: json, body: JSON.stringify({ clearance: select.value || null }),
-    });
+    // Send only what changed, so the audit log records real changes.
+    const before = select.dataset.initial || '';
+    const rolesChanged = boxes.some((b) => b.checked !== (b.dataset.initial === '1'));
+    let r = {};
+    if (rolesChanged) {
+      r = await api(`/api/auth/users/${enc}/roles`, {
+        method: 'PUT', headers: json, body: JSON.stringify({ roles }),
+      });
+    }
+    if ((select.value || '') !== before) {
+      await api(`/api/auth/users/${enc}/clearance`, {
+        method: 'PUT', headers: json, body: JSON.stringify({ clearance: select.value || null }),
+      });
+    }
+    if (!rolesChanged && (select.value || '') === before) {
+      status.textContent = `No changes for ${username}.`;
+      return;
+    }
     // Removing your own Admin role changes what this page may show.
     if (r.self) { window.location.reload(); return; }
     status.textContent = `Saved ${username}.`;

@@ -91,3 +91,42 @@ def test_maven_users_check_reports_problems(tmp_path):
     )
     assert proc.returncode == 1, proc.stderr
     assert '"username": "admin"' in proc.stdout
+
+
+# ---------------------------------------------------------------------------
+# A reset made by the CLI while the server is running (two processes)
+# ---------------------------------------------------------------------------
+
+def test_cli_reset_reaches_a_running_server(tmp_path):
+    """Found end to end: maven-users wrote auth.json, but the running server
+    kept its in-memory copy, so the new password failed, the old one still
+    worked, and existing sessions stayed signed in."""
+    from tests.test_set_admin import _fresh_auth_manager
+
+    auth_mod, server = _fresh_auth_manager(tmp_path)
+    assert server.create_user("bob", "old-password-1")
+    token = server.create_session("bob", "old-password-1")
+    assert server.validate_token(token)
+
+    cli = auth_mod.AuthManager(server.auth_path)          # the maven-users process
+    assert cli.reset_password("bob", "new-password-22")
+
+    server._auth_checked_at = 0  # skip the once-a-second throttle
+    assert server.verify_password("bob", "new-password-22")
+    assert not server.verify_password("bob", "old-password-1")
+    assert not server.validate_token(token)                # signed out everywhere
+    assert server.get_username_for_token(token) is None
+    fresh = server.create_session("bob", "new-password-22")
+    assert server.validate_token(fresh)                     # new sign-ins work
+
+
+def test_own_writes_do_not_trigger_reload(tmp_path, monkeypatch):
+    from tests.test_set_admin import _fresh_auth_manager
+
+    _, mgr = _fresh_auth_manager(tmp_path)
+    mgr.create_user("bob", "pw-12345678")
+    calls = []
+    monkeypatch.setattr(mgr, "_load", lambda: calls.append(1))
+    mgr._auth_checked_at = 0
+    mgr.verify_password("bob", "pw-12345678")
+    assert calls == []

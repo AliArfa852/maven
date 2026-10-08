@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Odysseus — first-time setup script.
+"""Maven — first-time setup script.
 
 Creates data directories, initializes the database, and sets up an
 initial admin user. Safe to re-run (skips what already exists).
@@ -19,7 +19,7 @@ from src.constants import (
     RAG_DIR, MEMORY_VECTORS_DIR, AGENT_WORKSPACE_DIR, PASSWORD_MIN_LENGTH,
 )
 from core.auth import RESERVED_USERNAMES
-from src.brand import maven_env
+from src.brand import BRAND_NAME, maven_env
 
 DIRS = [
     DATA_DIR,
@@ -239,7 +239,7 @@ def check_arch():
 
 
 def main():
-    print("\n=== Odysseus Setup ===\n")
+    print(f"\n=== {BRAND_NAME} Setup ===\n")
 
     # Load .env so pre-seeded MAVEN_AI_ADMIN_USER / MAVEN_AI_ADMIN_PASSWORD (and
     # other deployment vars) are honored on native installs, not just when they

@@ -372,9 +372,10 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
         before = auth_manager.get_roles(target) if target in auth_manager.users else []
         result = auth_manager.set_roles(username, body.roles, user)
         _raise_on_access_refusal(result)
-        await asyncio.to_thread(audit.record, "access.roles", actor=user, target=target,
-                                ip=audit.client_ip(request),
-                                detail={"before": before, "after": auth_manager.get_roles(target)})
+        after = auth_manager.get_roles(target)
+        if sorted(after) != sorted(before):  # a Save with no change is not an access change
+            await asyncio.to_thread(audit.record, "access.roles", actor=user, target=target,
+                                    ip=audit.client_ip(request), detail={"before": before, "after": after})
         return {"ok": True, "self": target == user, **auth_manager.access_summary(target)}
 
     @router.put("/users/{username}/clearance")
@@ -383,11 +384,14 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
         user = _get_current_user(request)
         if not user or not auth_manager.is_admin(user):
             raise HTTPException(403, "Admin only")
+        target = (username or "").strip().lower()
+        before = auth_manager.access_summary(target).get("clearance_override") if target in auth_manager.users else None
         result = auth_manager.set_clearance(username, body.clearance, user)
         _raise_on_access_refusal(result)
-        await asyncio.to_thread(audit.record, "access.clearance", actor=user,
-                                target=(username or "").strip().lower(), ip=audit.client_ip(request),
-                                detail={"override": body.clearance})
+        if body.clearance != before:
+            await asyncio.to_thread(audit.record, "access.clearance", actor=user, target=target,
+                                    ip=audit.client_ip(request),
+                                    detail={"override": body.clearance, "before": before})
         return {"ok": True, **auth_manager.access_summary((username or "").strip().lower())}
 
     @router.post("/users")

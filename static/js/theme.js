@@ -2082,6 +2082,9 @@ export default themeModule;
 
 // Init on DOM ready, with server-side sync fallback
 async function _initWithSync() {
+  // The login page imports this module only for its background effect.
+  // Nobody is signed in there, so the server prefs calls would just 401.
+  if (typeof window !== 'undefined' && window.__odysseusLoginAppUrl) return;
   // If no local theme, try loading from server (cross-device sync)
   if (!getSaved()) {
     const serverTheme = await _loadFromServer();
