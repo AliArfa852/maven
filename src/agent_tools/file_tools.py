@@ -39,3 +39,24 @@ class CreateFileTool:
             "file": out,
             "exit_code": 0,
         }
+
+
+class SearchChatFilesTool:
+    """search_chat_files: passages from this chat's own documents (src/session_knowledge.py)."""
+
+    async def execute(self, content: str, ctx: dict) -> Dict:
+        from src import session_knowledge
+
+        try:
+            args = _parse_tool_args(content)
+        except ValueError:
+            args = {"query": content}
+        query = str(args.get("query") or "").strip()
+        if not query:
+            return {"error": "Need a query", "exit_code": 1}
+        session_id = ctx.get("session_id")
+        if not session_id:
+            return {"error": "No chat is active, so there are no chat files to search", "exit_code": 1}
+        passages = await asyncio.to_thread(
+            session_knowledge.search, session_id, ctx.get("owner"), query, args.get("k") or 5)
+        return {"response": session_knowledge.format_results(passages, query), "exit_code": 0}

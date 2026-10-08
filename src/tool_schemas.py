@@ -823,16 +823,32 @@ FUNCTION_TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
-            "name": "manage_documents",
-            "description": "Manage documents: list all documents (with optional search/language filter), delete documents, or run tidy cleanup.",
+            "name": "search_chat_files",
+            "description": "Search the files and documents attached to THIS chat for passages about a question. Use when the user asks about an attached file that was too long to read in full (it says truncated or omitted), or to find where a long document mentions something. Returns the best passages with the document id and character offset.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "action": {"type": "string", "enum": ["list", "delete", "tidy"]},
-                    "document_id": {"type": "string", "description": "Document ID (for delete)"},
+                    "query": {"type": "string", "description": "What to look for, in the document's own words where possible"},
+                    "k": {"type": "integer", "description": "How many passages (1-8, default 5)"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_documents",
+            "description": "Manage documents: list all documents (with optional search/language filter), read one (page through long ones with offset), delete documents, or run tidy cleanup.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["list", "read", "delete", "tidy"]},
+                    "document_id": {"type": "string", "description": "Document ID (for read and delete)"},
                     "search": {"type": "string", "description": "Search query (for list)"},
                     "language": {"type": "string", "description": "Filter by language (for list)"},
-                    "limit": {"type": "integer", "description": "Max results (for list, default 50)"}
+                    "limit": {"type": "integer", "description": "Max results (for list, default 50) or characters (for read)"},
+                    "offset": {"type": "integer", "description": "Character position to start reading from (for read; use next_offset from the previous read)"}
                 },
                 "required": ["action"]
             }
@@ -1603,7 +1619,7 @@ def function_call_to_tool_block(name: str, arguments: str) -> Optional[ToolBlock
             content = action
     elif tool_type in ("manage_tasks", "manage_skills", "api_call",
                         "manage_endpoints", "manage_mcp", "manage_webhooks",
-                        "manage_tokens", "manage_documents", "manage_settings"):
+                        "manage_tokens", "manage_documents", "manage_settings", "search_chat_files"):
         content = json.dumps(args)
     elif tool_type == "ask_teacher":
         content = args.get("model", "auto") + "\n" + args.get("problem", "")

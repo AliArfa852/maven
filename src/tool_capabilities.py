@@ -118,6 +118,7 @@ _register(
         "scan_email_unsubscribes",
         "search_chats",
         "search_emails",
+        "search_chat_files",
         "list_sessions",
         "tail_serve_output",
         "vault_get",

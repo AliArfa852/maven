@@ -113,6 +113,13 @@ Attach files to a message (paperclip, or drag and drop) and ask about them:
 | PDF | Text (form filling needs the optional extras in the setup guide) |
 | CSV, Markdown, text, code | As is |
 
+**Long files.** Only the first part of a long file fits in the message the model
+reads, but the full text is saved as a document in the chat. In **Agent**
+mode, ask about any part of it ("what does the contract say about
+termination?") and Maven searches all of this chat's files for the right
+passages, citing the document. It never searches other chats or other
+people's files.
+
 Uploads belong to the person who uploaded them. Other users cannot open them.
 
 ## 6. Create files and charts

@@ -139,6 +139,7 @@ Web fetches are checked for data carried in the URL or query string. Model answe
 This is the user's own memories, owner-scoped. No change apart from adding labels.
 
 ### 4.2 Tier 1: session knowledge (conversation-limited RAG)
+- **Built 2026-10-08 (v1):** `search_chat_files` agent tool (`src/session_knowledge.py`): BM25 over overlapping chunks of the chat's own Documents (where attachments' full text lands), scoped in the query to session + owner; offered whenever the chat has documents. `manage_documents` schema now advertises read + offset. Not yet: embeddings, pinned tool outputs, shared-session participants.
 - Each session has its own index namespace. It holds that session's attachments, linked documents, pasted resources, and the tool outputs the user pinned.
 - Only the session's participants can query it. It is deleted with the session, or kept per the retention policy.
 - **Shared sessions:** an owner adds participants as editor or viewer. Adding someone is checked against the session's level (§3.4). Participants share the Tier-1 index and each sees the others' messages. Per-participant personal memory is **never** shared.

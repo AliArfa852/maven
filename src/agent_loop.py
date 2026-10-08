@@ -528,7 +528,7 @@ _DOMAIN_RULES = {
 
 _DOMAIN_TOOL_MAP = {
     "web": set(WEB_TOOL_NAMES),
-    "documents": {"create_document", "edit_document", "update_document", "suggest_document", "manage_documents", "create_file"},
+    "documents": {"create_document", "edit_document", "update_document", "suggest_document", "manage_documents", "create_file", "search_chat_files"},
     "email": {"list_email_accounts", "list_emails", "read_email", "scan_email_unsubscribes", "unsubscribe_email", "send_email", "reply_to_email", "bulk_email", "archive_email", "delete_email", "mark_email_read", "resolve_contact", "manage_contact"},
     "cookbook": {"download_model", "serve_model", "serve_preset", "list_serve_presets", "list_served_models", "stop_served_model", "tail_serve_output", "list_downloads", "cancel_download", "search_hf_models", "list_cached_models", "list_cookbook_servers", "adopt_served_model"},
     "notes_calendar_tasks": {"manage_notes", "manage_calendar", "manage_tasks"},
@@ -648,6 +648,12 @@ Return the absolute path of the active workspace folder. File tools are CONFINED
 {"format": "xlsx", "filename": "Q3 sales", "spec": {"sheets": [{"name": "Sales", "rows": [["Region", "Revenue"], ["North", 120]]}]}}
 ```
 Create a downloadable Excel (xlsx), Word (docx), PowerPoint (pptx), PDF or CSV file and give the user its link. Use when the user asks for a file in one of those formats, not for editor documents. spec: spreadsheets/CSV use "sheets" (or "rows"; first row = header); docx/pdf use "title" + "blocks" ([{"type": "heading"|"paragraph"|"bullets"|"table", "text"/"items"/"rows"}]); pptx uses "slides" ([{"title", "bullets"} or {"title", "table"}]). Put only real data in it; never invent figures.""",
+
+    "search_chat_files": """\
+```search_chat_files
+{"query": "termination notice period", "k": 5}
+```
+Search the files attached to THIS chat (and documents created from them) for the passages that answer a question. Use it when an attachment was marked truncated or omitted, or the user asks what a long document says about something; then answer from the passages and cite the document. Read further with manage_documents action=read, document_id, offset.""",
 
     "create_document": """\
 ```create_document
@@ -1133,6 +1139,22 @@ def _insert_before_latest_user(messages: List[Dict], context_msg: Dict) -> List[
             return out
     out.append(context_msg)
     return out
+
+
+def _session_has_documents(session_id: str, owner: Optional[str]) -> bool:
+    """True when this chat has documents (e.g. full text of earlier attachments)."""
+    try:
+        from core.database import Document, SessionLocal
+
+        db = SessionLocal()
+        try:
+            q = db.query(Document.id).filter(Document.session_id == session_id, Document.archived.isnot(True))
+            q = q.filter(Document.owner.is_(None)) if owner is None else q.filter(Document.owner == owner)
+            return q.first() is not None
+        finally:
+            db.close()
+    except Exception:
+        return False
 
 
 def _uploaded_files_context_message(uploaded_files: Optional[List[Dict]]) -> Optional[Dict]:
@@ -4028,7 +4050,14 @@ async def stream_agent_loop(
         if _relevant_tools is None:
             from src.tool_index import ALWAYS_AVAILABLE
             _relevant_tools = set(ALWAYS_AVAILABLE)
-        _relevant_tools.update({"read_file", "grep", "ls", "manage_documents"})
+        _relevant_tools.update({"read_file", "grep", "ls", "manage_documents", "search_chat_files"})
+    elif not guide_only and session_id and _session_has_documents(session_id, owner):
+        # Files attached in an earlier turn: their full text lives in this
+        # chat's documents, so keep the in-chat search within reach.
+        if _relevant_tools is None:
+            from src.tool_index import ALWAYS_AVAILABLE
+            _relevant_tools = set(ALWAYS_AVAILABLE)
+        _relevant_tools.update({"search_chat_files", "manage_documents"})
 
     # Per-request forced tools are stronger than retrieval. Explicit search
     # settings make web tools visible even when tool RAG misses them;
