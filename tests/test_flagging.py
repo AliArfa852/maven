@@ -180,3 +180,44 @@ def test_login_policy_carries_the_notice(tmp_path, monkeypatch):
     monkeypatch.delenv("MAVEN_AI_FLAGGING", raising=False)
     _, mgr = _fresh_auth_manager(tmp_path)
     assert mgr.policy()["monitoring_notice"] == flagging.monitoring_notice()
+
+
+def test_retention_days_setting(monkeypatch):
+    monkeypatch.delenv("MAVEN_AI_FLAG_RETENTION_DAYS", raising=False)
+    assert flagging.retention_days() == 180
+    monkeypatch.setenv("MAVEN_AI_FLAG_RETENTION_DAYS", "30")
+    assert flagging.retention_days() == 30
+    monkeypatch.setenv("MAVEN_AI_FLAG_RETENTION_DAYS", "soon")
+    assert flagging.retention_days() == 180
+
+
+def test_purge_removes_only_old_decided_flags():
+    from datetime import datetime, timedelta
+    from core.database import ConversationFlag, SessionLocal
+
+    now = datetime(2026, 10, 8)
+    tag = uuid.uuid4().hex[:8]
+    rows = {
+        f"{tag}-old-decided": ("dismissed", now - timedelta(days=200)),
+        f"{tag}-new-decided": ("warned", now - timedelta(days=10)),
+        f"{tag}-old-open": ("open", None),
+    }
+    db = SessionLocal()
+    for fid, (status, reviewed) in rows.items():
+        db.add(ConversationFlag(id=fid, session_id="s", category="secret", rule="r", severity="high",
+                                excerpt="x", status=status, reviewed_at=reviewed,
+                                created_at=now - timedelta(days=300)))
+    db.commit()
+    db.close()
+    try:
+        assert flagging.purge_decided_flags(days=180, now=now) >= 1
+        assert flagging.purge_decided_flags(days=0, now=now) == 0   # 0 = keep forever
+        db = SessionLocal()
+        left = {f.id for f in db.query(ConversationFlag).filter(ConversationFlag.id.startswith(tag))}
+        db.close()
+        assert left == {f"{tag}-new-decided", f"{tag}-old-open"}
+    finally:
+        db = SessionLocal()
+        db.query(ConversationFlag).filter(ConversationFlag.id.startswith(tag)).delete(synchronize_session=False)
+        db.commit()
+        db.close()

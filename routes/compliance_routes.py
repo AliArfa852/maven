@@ -14,7 +14,7 @@ from core.database import ConversationFlag, SessionLocal
 from core.middleware import require_capability
 from src import access
 from src.auth_helpers import get_current_user
-from src.flagging import CATEGORIES
+from src.flagging import CATEGORIES, retention_days
 
 STATUSES = ("open", "dismissed", "warned", "escalated")
 DECISIONS = {"dismiss": "dismissed", "warn": "warned", "escalate": "escalated"}
@@ -61,7 +61,8 @@ def setup_compliance_routes() -> APIRouter:
             rows = q.order_by(ConversationFlag.created_at.desc()).limit(limit).all()
             counts = {s: db.query(ConversationFlag).filter(ConversationFlag.status == s).count()
                       for s in STATUSES}
-            return {"flags": [_flag_dict(f) for f in rows], "counts": counts}
+            return {"flags": [_flag_dict(f) for f in rows], "counts": counts,
+                    "retention_days": retention_days()}
         finally:
             db.close()
 

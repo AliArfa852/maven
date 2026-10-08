@@ -141,7 +141,8 @@ async function loadFlags() {
     const data = await api(`/api/compliance/flags?status=${encodeURIComponent(status)}`);
     const c = data.counts || {};
     el('ac-flag-counts').textContent =
-      `${c.open || 0} open · ${c.escalated || 0} escalated · ${c.warned || 0} warned · ${c.dismissed || 0} dismissed`;
+      `${c.open || 0} open · ${c.escalated || 0} escalated · ${c.warned || 0} warned · ${c.dismissed || 0} dismissed` +
+      (data.retention_days ? ` · decided flags are deleted after ${data.retention_days} days` : ' · decided flags are kept');
     renderFlags(data.flags || []);
     box.textContent = data.flags && data.flags.length ? '' : 'Nothing here.';
   } catch (err) {

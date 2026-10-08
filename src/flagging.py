@@ -192,3 +192,48 @@ def scan_and_record(session_id: str, message_id: str | None, owner: str | None, 
     except Exception:
         logger.exception("Conversation flagging failed; the message itself was saved")
         return 0
+
+
+DEFAULT_RETENTION_DAYS = 180
+
+
+def retention_days() -> int:
+    """Days to keep DECIDED flags (MAVEN_AI_FLAG_RETENTION_DAYS; 0 = keep forever).
+
+    Records about employees should not outlive their purpose (data
+    minimisation). Open flags are never purged: they still need a decision.
+    """
+    raw = (maven_env("MAVEN_AI_FLAG_RETENTION_DAYS", "") or "").strip()
+    if not raw:
+        return DEFAULT_RETENTION_DAYS
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        logger.warning("MAVEN_AI_FLAG_RETENTION_DAYS=%r is not a number; using %d",
+                       raw, DEFAULT_RETENTION_DAYS)
+        return DEFAULT_RETENTION_DAYS
+
+
+def purge_decided_flags(days: int | None = None, now=None) -> int:
+    """Delete decided flags reviewed more than ``days`` ago. Returns the count."""
+    from datetime import datetime, timedelta
+
+    from core.database import ConversationFlag, SessionLocal
+
+    days = retention_days() if days is None else days
+    if days <= 0:
+        return 0
+    cutoff = (now or datetime.utcnow()) - timedelta(days=days)
+    db = SessionLocal()
+    try:
+        n = (db.query(ConversationFlag)
+             .filter(ConversationFlag.status != "open",
+                     ConversationFlag.reviewed_at.isnot(None),
+                     ConversationFlag.reviewed_at < cutoff)
+             .delete(synchronize_session=False))
+        db.commit()
+    finally:
+        db.close()
+    if n:
+        logger.info("Purged %d decided conversation flag(s) older than %d days", n, days)
+    return n

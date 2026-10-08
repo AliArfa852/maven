@@ -1267,6 +1267,19 @@ async def _startup_event():
 
     _startup_tasks.append(asyncio.create_task(_null_owner_sweep_loop()))
 
+    # Daily: delete decided conversation flags past their retention period
+    # (MAVEN_AI_FLAG_RETENTION_DAYS, default 180; open flags are kept).
+    async def _flag_retention_loop():
+        from src.flagging import purge_decided_flags
+        while True:
+            try:
+                await asyncio.to_thread(purge_decided_flags)
+            except Exception as e:
+                logger.warning(f"Flag retention purge failed: {e}")
+            await asyncio.sleep(24 * 3600)
+
+    _startup_tasks.append(asyncio.create_task(_flag_retention_loop()))
+
     # Nightly skill audit — at ~02:00 local, test + judge a batch of the
     # least-recently-checked skills, auto-fixing/escalating weak ones (never
     # deletes). Rotates through the library so each night covers different
