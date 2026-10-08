@@ -8,6 +8,8 @@ This page keeps the detailed install, deployment, troubleshooting, and configura
 
 ## Quick Start
 
+> Installed already? The [getting started guide](getting-started.md) tours the features.
+
 > **Branch note:** `dev` is the default branch and contains the latest development changes, but it may be unstable. For the more stable curated branch, use [`main`](https://github.com/odysseus-dev/odysseus/tree/main).
 
 Defaults work out of the box: clone, run, then configure models/search/email

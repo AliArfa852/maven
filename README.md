@@ -8,6 +8,7 @@
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> ·
+  <a href="website/getting-started.md">Getting Started</a> ·
   <a href="website/setup.md">Setup Guide</a> ·
   <a href="CONTRIBUTING.md">Contributing</a> ·
   <a href="ROADMAP.md">Roadmap</a>
@@ -46,6 +47,8 @@ MAVEN_AI_IMAGE=ghcr.io/aliarfa852/maven:1.0.2-7c8070f docker compose up -d
 
 Settings use `MAVEN_AI_*` names; the old `ODYSSEUS_*` names still work, and the new name wins when both are set.
 
+**New to Maven?** The [getting started guide](website/getting-started.md) walks through a first run and every feature: models, agents, Office files and charts, roles and the Admin Console, compliance review, the audit log, PostgreSQL and backups.
+
 Native installs, GPU notes, Windows/macOS instructions, HTTPS, and configuration live in the [setup guide](website/setup.md).
 
 ## Features
@@ -57,6 +60,9 @@ Native installs, GPU notes, Windows/macOS instructions, HTTPS, and configuration
 - **Documents** — writing-first editor with AI edits, suggestions, Markdown, HTML, CSV, and syntax highlighting.
 - **Email** — IMAP/SMTP inbox with triage, tags, summaries, reminders, and reply drafts.
 - **Notes, Tasks + Calendar** — reminders, todos, scheduled agent tasks, and CalDAV sync.
+- **Office files** — read Excel, Word, PowerPoint and PDF; create xlsx, docx, pptx, pdf and csv files with bar, line and pie charts.
+- **Roles + Admin Console** — multiple roles per person, clearance levels, view-only access for managers.
+- **Compliance + audit** — rule-based flagging of risky messages for Compliance Officers, and a tamper-evident audit log.
 - **Extras** — gallery/image editor, themes, uploads, web search, presets, sessions, and 2FA.
 
 ## Based on Odysseus
