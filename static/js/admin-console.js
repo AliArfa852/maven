@@ -197,6 +197,65 @@ async function decideFlag(id, decision, button) {
   }
 }
 
+// ── Flagging rules (compliance.review only) ──
+
+function renderSettings(data) {
+  el('ac-flagging-off').hidden = data.flagging_enabled;
+  el('ac-keywords').value = (data.keywords || []).join('\n');
+  const envNote = el('ac-env-keywords');
+  envNote.hidden = !(data.env_keywords || []).length;
+  envNote.textContent = `Also set by the server (MAVEN_AI_FLAG_KEYWORDS, not editable here): ${(data.env_keywords || []).join(', ')}`;
+  const off = new Set(data.disabled_rules || []);
+  const rows = el('ac-rule-rows');
+  rows.replaceChildren();
+  for (const r of data.rules || []) {
+    const tr = node('tr');
+    const cell = node('td');
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.value = r.rule;
+    box.checked = !off.has(r.rule);
+    box.setAttribute('aria-label', `Rule ${r.rule} on`);
+    cell.append(box);
+    tr.append(cell, node('td', r.rule), node('td', r.category_label),
+      node('td', r.severity, r.severity === 'high' ? 'sev-high' : ''));
+    rows.append(tr);
+  }
+  el('ac-settings-status').textContent = data.updated_at
+    ? `Last changed by ${data.updated_by || '?'} at ${new Date(data.updated_at).toLocaleString()}`
+    : '';
+}
+
+async function loadSettings() {
+  renderSettings(await api('/api/compliance/settings'));
+  el('ac-flag-settings').hidden = false;
+}
+
+async function saveSettings() {
+  const button = el('ac-settings-save');
+  const status = el('ac-settings-status');
+  button.disabled = true;
+  status.className = 'status';
+  status.textContent = 'Saving…';
+  try {
+    const keywords = el('ac-keywords').value.split('\n').map((k) => k.trim()).filter(Boolean);
+    const disabled_rules = [...el('ac-rule-rows').querySelectorAll('input[type=checkbox]')]
+      .filter((b) => !b.checked).map((b) => b.value);
+    const data = await api('/api/compliance/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keywords, disabled_rules }),
+    });
+    renderSettings(data);
+    status.textContent = `Saved. ${status.textContent}`;
+  } catch (err) {
+    status.className = 'status error';
+    status.textContent = err.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function load() {
   const brand = window.MAVEN_BRAND ? window.MAVEN_BRAND.name : '';
   el('ac-title').textContent = brand ? `${brand} Admin Console` : 'Admin Console';
@@ -221,7 +280,12 @@ async function load() {
   el('ac-compliance').hidden = !caps.includes('compliance.review');
   if (caps.includes('compliance.review')) {
     el('ac-flag-status').addEventListener('change', loadFlags);
+    el('ac-settings-save').addEventListener('click', saveSettings);
     loadFlags();
+    loadSettings().catch((err) => {
+      el('ac-flags-status').className = 'status error';
+      el('ac-flags-status').textContent = `Flagging rules: ${err.message}`;
+    });
   }
 
   const [catalogue, users] = await Promise.all([api('/api/auth/roles'), api('/api/auth/users')]);

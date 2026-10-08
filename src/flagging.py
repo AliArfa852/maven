@@ -92,9 +92,109 @@ def _luhn_ok(digits: str) -> bool:
     return total % 10 == 0
 
 
-def _keywords() -> list[str]:
+# ---------------------------------------------------------------------------
+# Settings Compliance Officers can change in the admin console
+# ---------------------------------------------------------------------------
+
+MAX_KEYWORDS = 200
+MAX_KEYWORD_LEN = 80
+_settings_cache: dict = {"key": None, "value": None}
+
+
+def rule_catalogue() -> list[dict]:
+    """Every rule scan() can raise, for the settings screen."""
+    rules = [{"rule": r, "category": "secret", "severity": "high"} for r, _ in _SECRET_RULES]
+    rules += [{"rule": r, "category": c, "severity": sev} for c, r, sev, _ in _PATTERN_RULES]
+    rules += [{"rule": "payment_card_number", "category": "personal_data", "severity": "high"},
+              {"rule": "many_email_addresses", "category": "personal_data", "severity": "medium"}]
+    for r in rules:
+        r["category_label"] = CATEGORIES[r["category"]]
+    return rules
+
+
+def settings_path() -> str:
+    import os
+
+    from src.constants import DATA_DIR
+    return os.path.join(DATA_DIR, "flag_settings.json")
+
+
+def load_settings() -> dict:
+    """Saved keywords and switched-off rules ({} parts when nothing is saved).
+
+    Cached on the file's modification time: scan() runs on every message.
+    """
+    import json
+    import os
+
+    path = settings_path()
+    try:
+        key = (path, os.stat(path).st_mtime_ns)
+    except OSError:
+        return {"keywords": [], "disabled_rules": []}
+    if _settings_cache["key"] != key:
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("not an object")
+        except (OSError, ValueError) as exc:
+            logger.warning("Ignoring unreadable %s: %s", path, exc)
+            data = {}
+        known = {r["rule"] for r in rule_catalogue()}
+        _settings_cache["value"] = {
+            "keywords": [k for k in data.get("keywords") or [] if isinstance(k, str) and k.strip()],
+            "disabled_rules": [r for r in data.get("disabled_rules") or [] if r in known],
+            "updated_by": data.get("updated_by"),
+            "updated_at": data.get("updated_at"),
+        }
+        _settings_cache["key"] = key
+    return dict(_settings_cache["value"])
+
+
+def clean_keywords(words, limit: int | None = MAX_KEYWORDS) -> list[str]:
+    """Trim, drop blanks and duplicates (case-insensitive), keep order."""
+    seen, out = set(), []
+    for w in words or []:
+        if not isinstance(w, str):
+            continue
+        w = " ".join(w.split())[:MAX_KEYWORD_LEN]
+        if w and w.lower() not in seen:
+            seen.add(w.lower())
+            out.append(w)
+    if limit is not None and len(out) > limit:
+        raise ValueError(f"At most {limit} keywords")
+    return out
+
+
+def save_settings(keywords, disabled_rules, updated_by: str | None) -> dict:
+    from datetime import datetime, timezone
+
+    from core.atomic_io import atomic_write_json
+
+    known = {r["rule"] for r in rule_catalogue()}
+    unknown = [r for r in disabled_rules or [] if r not in known]
+    if unknown:
+        raise ValueError(f"Unknown rule: {', '.join(map(str, unknown))}")
+    data = {
+        "keywords": clean_keywords(keywords),
+        "disabled_rules": sorted(set(disabled_rules or [])),
+        "updated_by": updated_by,
+        "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    atomic_write_json(settings_path(), data, indent=2)
+    _settings_cache["key"] = None
+    return load_settings()
+
+
+def env_keywords() -> list[str]:
     raw = maven_env("MAVEN_AI_FLAG_KEYWORDS", "") or ""
     return [k.strip() for k in raw.split(",") if k.strip()]
+
+
+def _keywords() -> list[str]:
+    """Keywords from the environment plus those saved in the admin console."""
+    return clean_keywords(env_keywords() + load_settings()["keywords"], limit=None)
 
 
 def scan(text: str) -> list[Finding]:
@@ -103,6 +203,7 @@ def scan(text: str) -> list[Finding]:
         return []
     text = text[:MAX_SCAN_CHARS]
     found: list[Finding] = []
+    off = set(load_settings()["disabled_rules"])
     for rule, rx in _SECRET_RULES:
         m = rx.search(text)
         if m:
@@ -111,12 +212,14 @@ def scan(text: str) -> list[Finding]:
         m = rx.search(text)
         if m:
             found.append(Finding(category, rule, severity, m.start(), m.end()))
+    found = [f for f in found if f.rule not in off]
     for m in _CARD.finditer(text):
-        if _luhn_ok(m.group()):
+        if "payment_card_number" not in off and _luhn_ok(m.group()):
             found.append(Finding("personal_data", "payment_card_number", "high", m.start(), m.end()))
             break
     emails = list(_EMAIL.finditer(text))
-    if len({e.group().lower() for e in emails}) >= _PERSONAL_DATA_EMAILS:
+    if ("many_email_addresses" not in off
+            and len({e.group().lower() for e in emails}) >= _PERSONAL_DATA_EMAILS):
         found.append(Finding("personal_data", "many_email_addresses", "medium",
                              emails[0].start(), emails[-1].end()))
     for word in _keywords():

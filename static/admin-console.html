@@ -42,6 +42,8 @@
     th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
     th { color: var(--muted); font-weight: 600; font-size: 12px; }
     label.role { display: inline-flex; align-items: center; gap: 4px; margin: 0 10px 4px 0; white-space: nowrap; }
+    textarea { width: 100%; font: 13px/1.4 ui-monospace, monospace; color: var(--text); background: var(--bg);
+      border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; }
     select, button { font: inherit; font-size: 12px; color: var(--text); background: var(--bg);
       border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
     button { cursor: pointer; }
@@ -93,6 +95,23 @@
         </table>
       </div>
       <p id="ac-flags-status" class="status"></p>
+    </section>
+
+    <section id="ac-flag-settings" hidden>
+      <h2>Flagging rules</h2>
+      <p class="sub">Watch-list keywords raise a low-severity flag when a message contains them (whole words, any case). Switch off a rule that flags too much ordinary work.</p>
+      <p id="ac-flagging-off" class="notice" hidden>Flagging is switched off on this server (MAVEN_AI_FLAGGING=0). Changes here take effect when it is switched back on.</p>
+      <label for="ac-keywords" class="sub" style="display:block;margin:0 0 4px">Watch-list keywords, one per line</label>
+      <textarea id="ac-keywords" rows="6" spellcheck="false"></textarea>
+      <p id="ac-env-keywords" class="sub" hidden></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>On</th><th>Rule</th><th>Category</th><th>Severity</th></tr></thead>
+          <tbody id="ac-rule-rows"></tbody>
+        </table>
+      </div>
+      <p><button id="ac-settings-save">Save rules</button></p>
+      <p id="ac-settings-status" class="status"></p>
     </section>
 
     <section id="ac-roles" hidden>

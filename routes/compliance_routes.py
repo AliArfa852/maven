@@ -14,11 +14,17 @@ from core.database import ConversationFlag, SessionLocal
 from core.middleware import require_capability
 from src import access
 from src.auth_helpers import get_current_user
+from src import flagging
 from src.flagging import CATEGORIES, retention_days
 
 STATUSES = ("open", "dismissed", "warned", "escalated")
 DECISIONS = {"dismiss": "dismissed", "warn": "warned", "escalate": "escalated"}
 MAX_PAGE = 200
+
+
+class FlagSettings(BaseModel):
+    keywords: list[str] = Field(default_factory=list)
+    disabled_rules: list[str] = Field(default_factory=list)
 
 
 class FlagDecision(BaseModel):
@@ -85,5 +91,32 @@ def setup_compliance_routes() -> APIRouter:
             return {"ok": True, "flag": _flag_dict(flag)}
         finally:
             db.close()
+
+    def _settings_view() -> dict:
+        saved = flagging.load_settings()
+        return {
+            "keywords": saved["keywords"],
+            "env_keywords": flagging.env_keywords(),
+            "disabled_rules": saved["disabled_rules"],
+            "rules": flagging.rule_catalogue(),
+            "updated_by": saved.get("updated_by"),
+            "updated_at": saved.get("updated_at"),
+            "flagging_enabled": flagging.flagging_enabled(),
+            "max_keywords": flagging.MAX_KEYWORDS,
+        }
+
+    @router.get("/settings")
+    def get_settings(request: Request):
+        require_capability(request, access.COMPLIANCE_REVIEW)
+        return _settings_view()
+
+    @router.put("/settings")
+    def put_settings(body: FlagSettings, request: Request):
+        require_capability(request, access.COMPLIANCE_REVIEW)
+        try:
+            flagging.save_settings(body.keywords, body.disabled_rules, get_current_user(request))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        return _settings_view()
 
     return router
