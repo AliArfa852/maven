@@ -28,8 +28,13 @@ import argparse, json, logging, os, shutil, sqlite3, subprocess, sys, tarfile, t
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
-_DATA_DIR = _REPO_ROOT / "data"
+# The data folder the app really uses (MAVEN_AI_DATA_DIR / ODYSSEUS_DATA_DIR,
+# else <repo>/data). Inside the archive it is always stored as data/.
+from src.constants import DATA_DIR as _APP_DATA_DIR
+_DATA_DIR = Path(_APP_DATA_DIR)
 _BACKUP_DIR = _REPO_ROOT / "backups"
+# A non-SQLite database (PostgreSQL) is exported here inside the archive.
+_DB_EXPORT = "_db_export"
 
 # Stuff inside data/ that we explicitly skip — anything we can re-derive
 # from the SQLite DB + JSON state. Keeps the tarball small.
@@ -82,6 +87,10 @@ def cmd_snapshot(args):
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     sqlite_dbs = [p for p in _DATA_DIR.rglob("*.db") if p.is_file() and not p.is_symlink()]
+    db_url = os.environ.get("DATABASE_URL", "")
+    from src.db_url import is_sqlite_url, with_installed_postgres_driver
+    external_db = bool(db_url) and not is_sqlite_url(db_url)
+    exported = None
     files_added = 0
     total_bytes = 0
 
@@ -96,11 +105,32 @@ def cmd_snapshot(args):
             _sqlite_safe_copy(db, staged)
             db_map[db] = staged
 
+        # A PostgreSQL database lives outside data/: export its tables too,
+        # or the backup would hold no database at all.
+        if external_db:
+            from sqlalchemy import create_engine
+            from src.db_export import export_tables
+            engine = create_engine(with_installed_postgres_driver(db_url))
+            try:
+                exported = export_tables(engine, tmp / _DB_EXPORT)
+            except Exception as e:
+                fail(f"could not export the database ({engine.url.render_as_string(hide_password=True)}): {e}")
+            finally:
+                engine.dispose()
+
         with tarfile.open(out_path, "w:gz") as tar:
+            if exported is not None:
+                for p in sorted((tmp / _DB_EXPORT).iterdir()):
+                    tar.add(p, arcname=f"data/{_DB_EXPORT}/{p.name}")
+                    files_added += 1
+                    total_bytes += p.stat().st_size
             for p in sorted(_DATA_DIR.rglob("*")):
                 if not p.is_file() or p.is_symlink():
                     continue
-                rel = p.relative_to(_DATA_DIR.parent)
+                rel_data = p.relative_to(_DATA_DIR)
+                if rel_data.parts and rel_data.parts[0] == _DB_EXPORT:
+                    continue  # an old export left by a restore; never mix it in
+                rel = Path("data") / rel_data
                 # Skip user-asked-to-skip categories
                 if not args.include_research and "deep_research" in rel.parts:
                     continue
@@ -124,6 +154,10 @@ def cmd_snapshot(args):
         "ratio": round(out_path.stat().st_size / max(total_bytes, 1), 4),
         "included_research": bool(args.include_research),
         "included_attachments": bool(args.include_attachments),
+        "data_dir": str(_DATA_DIR),
+        "database": ({"exported": True, "dialect": exported["dialect"], "tables": len(exported["tables"]),
+                      "rows": sum(exported["tables"].values())} if exported is not None
+                     else {"exported": False, "note": "SQLite files are inside data/"}),
     }, args)
 
 
@@ -194,10 +228,13 @@ def _validate_restore_members(members):
             fail(f"refusing tarball with special file entry: {m.name!r}")
 
 
-def _extract_restore_members(tar, members, root: Path) -> None:
-    """Extract only regular files/directories after validation."""
+def _extract_restore_members(tar, members, data_dir: Path) -> None:
+    """Extract only regular files/directories after validation.
+
+    Archive entries are data/<path>; they land in ``data_dir``, which need
+    not be named "data" (MAVEN_AI_DATA_DIR)."""
     for m in members:
-        target = root.joinpath(*PurePosixPath(m.name).parts)
+        target = data_dir.joinpath(*PurePosixPath(m.name).parts[1:])
         if m.isdir():
             target.mkdir(parents=True, exist_ok=True)
             continue
@@ -225,17 +262,25 @@ def cmd_restore(args):
         _validate_restore_members(members)
         # Save a safety copy of current data/ before extracting.
         if _DATA_DIR.exists() or _DATA_DIR.is_symlink():
-            stash = _REPO_ROOT / f"data.before-restore-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            stash = _DATA_DIR.parent / f"{_DATA_DIR.name}.before-restore-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
             os.rename(_DATA_DIR, stash)
+        _DATA_DIR.mkdir(parents=True, exist_ok=True)
         try:
-            _extract_restore_members(tar, members, _REPO_ROOT)
+            _extract_restore_members(tar, members, _DATA_DIR)
         except Exception as e:
             fail(f"extract failed: {e}")
-    emit({
+    out = {
         "ok": True,
         "restored_from": str(path),
+        "data_dir": str(_DATA_DIR),
         "previous_data_stashed_at": str(stash) if stash else None,
-    }, args)
+    }
+    export_dir = _DATA_DIR / _DB_EXPORT
+    if export_dir.is_dir():
+        out["database_export"] = str(export_dir)
+        out["next_step"] = (f"The backup holds a database export. Load it into an EMPTY database: "
+                            f"python scripts/maven-db load-export {export_dir}")
+    emit(out, args)
 
 
 def _build_parser():

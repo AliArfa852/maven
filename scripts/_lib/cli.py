@@ -44,6 +44,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+# Read the same .env the app reads, so DATABASE_URL / MAVEN_AI_DATA_DIR set
+# only there reach the CLIs too (they used to see the defaults instead and
+# act on the wrong database or data folder). Exported variables still win.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(REPO_ROOT / ".env", encoding="utf-8-sig")
+except ImportError:  # python-dotenv is a core requirement; tolerate its absence
+    pass
+
 
 def quiet_logs() -> None:
     """Force the root logger down to WARNING (overridable via

@@ -12,6 +12,10 @@
 #   docker compose ... run --rm maven python scripts/maven-db copy-to-postgres
 # and start everything. The SQLite file is left untouched as a fallback.
 #
+# Backups: `python scripts/maven-backup snapshot` includes an export of every
+# table; after `maven-backup restore`, load it into an empty database with
+#   python scripts/maven-db load-export data/_db_export
+#
 # The database is reachable only from containers in this stack: no host port.
 services:
   postgres:

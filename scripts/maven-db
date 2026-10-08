@@ -4,6 +4,7 @@
     maven-db info                         # which database the app uses, row counts
     maven-db copy-to-postgres             # copy data/app.db into DATABASE_URL
     maven-db copy-to-postgres --from PATH --to postgresql://maven:pw@host:5432/maven
+    maven-db load-export data/_db_export  # after maven-backup restore, into an empty DB
 
 copy-to-postgres creates the schema in the target, copies every table in
 dependency order, and resets PostgreSQL's id counters. It refuses a target that
@@ -93,17 +94,51 @@ def cmd_copy_to_postgres(args):
 
         # Integer ids come from sequences in PostgreSQL; move each past the
         # copied rows so new inserts don't collide.
+        from src.db_export import reset_sequences
+        reset_sequences(dst, tables)
+    emit(report, args)
+    return 0
+
+
+def cmd_load_export(args):
+    """Load a maven-backup database export (data/_db_export) into an empty database."""
+    from src.db_export import iter_rows, read_manifest, reset_sequences
+    in_dir = Path(args.path)
+    try:
+        manifest = read_manifest(in_dir)
+    except (FileNotFoundError, ValueError) as e:
+        fail(str(e))
+    target_url = args.target or os.environ.get("DATABASE_URL", "")
+    if not target_url:
+        fail("no target: pass --to URL or set DATABASE_URL")
+    from src.db_url import with_installed_postgres_driver
+    os.environ["DATABASE_URL"] = with_installed_postgres_driver(target_url)
+    from sqlalchemy import func, select
+    from core.database import Base, engine as target  # creates the schema
+
+    tables = [t for t in Base.metadata.sorted_tables if t.name in manifest["tables"]]
+    with target.connect() as conn:
+        busy = [t.name for t in tables
+                if conn.execute(select(func.count()).select_from(t)).scalar()]
+    if busy:
+        fail("target already holds data in: " + ", ".join(busy) + ". Load into an empty database.")
+    report = {"source": str(in_dir), "target": target.url.render_as_string(hide_password=True),
+              "tables": {}, "skipped_columns": {}}
+    with target.begin() as dst:
         for table in tables:
-            for col in table.primary_key.columns:
-                if col.autoincrement is True or (
-                    col.autoincrement == "auto" and col.type.python_type is int
-                    and len(table.primary_key.columns) == 1):
-                    seq = dst.execute(text("SELECT pg_get_serial_sequence(:t, :c)"),
-                                      {"t": table.name, "c": col.name}).scalar()
-                    if seq:
-                        dst.execute(text(
-                            f'SELECT setval(:s, COALESCE((SELECT MAX("{col.name}") '
-                            f'FROM "{table.name}"), 0) + 1, false)'), {"s": seq})
+            count = 0
+            for batch in iter_rows(in_dir, table.name):
+                dropped = sorted({k for r in batch for k in r} - set(table.columns.keys()))
+                if dropped:
+                    report["skipped_columns"][table.name] = dropped
+                dst.execute(table.insert(), [{k: v for k, v in r.items() if k in table.columns}
+                                             for r in batch])
+                count += len(batch)
+            report["tables"][table.name] = count
+        reset_sequences(dst, tables)
+    if any(report["tables"].get(t, 0) != n for t, n in manifest["tables"].items()
+           if t in report["tables"]):
+        fail("row counts differ from the export manifest; the load may be incomplete")
     emit(report, args)
     return 0
 
@@ -119,6 +154,11 @@ def build_parser():
     pc.add_argument("--from", dest="source", help="SQLite file (default: data/app.db)")
     pc.add_argument("--to", dest="target", help="PostgreSQL URL (default: DATABASE_URL)")
     pc.set_defaults(func=cmd_copy_to_postgres)
+    pl = sub.add_parser("load-export", parents=[p._common_parents[0]],
+                        help="load a maven-backup database export into an empty database")
+    pl.add_argument("path", help="the export folder, e.g. data/_db_export from a restored backup")
+    pl.add_argument("--to", dest="target", help="database URL (default: DATABASE_URL)")
+    pl.set_defaults(func=cmd_load_export)
     return p
 
 
