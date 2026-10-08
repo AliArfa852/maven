@@ -806,7 +806,7 @@ FUNCTION_TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "create_file",
-            "description": "Create a downloadable file for the user: Excel (xlsx), Word (docx), PowerPoint (pptx), PDF or CSV. Returns a link. Use when the user asks for a file in one of these formats (not for editor documents). Spreadsheets/CSV: spec.sheets=[{name, rows}] or spec.rows; the first row is the header. Word/PDF: spec.title + spec.blocks=[{type: heading|paragraph|bullets|table, text|items|rows}]. PowerPoint: spec.title + spec.slides=[{title, bullets} or {title, table}]. Use only real data from the conversation or tools; never invent figures.",
+            "description": "Create a downloadable file for the user: Excel (xlsx), Word (docx), PowerPoint (pptx), PDF or CSV. Returns a link. Use when the user asks for a file in one of these formats (not for editor documents). Spreadsheets/CSV: spec.sheets=[{name, rows}] or spec.rows; the first row is the header. Word/PDF: spec.title + spec.blocks=[{type: heading|paragraph|bullets|table, text|items|rows}]. PowerPoint: spec.title + spec.slides=[{title, bullets} or {title, table} or {title, chart}]. Charts: a block or slide chart is {type: chart, kind: bar|barh|line|pie, title, categories: [...], series: [{name, values: [numbers]}]}; in a spreadsheet, a sheet's charts=[{kind, title, x: category column, y: [value columns]}] (0-based columns) plots the sheet's own data. Use only real data from the conversation or tools; never invent figures.",
             "parameters": {
                 "type": "object",
                 "properties": {

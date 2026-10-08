@@ -7,13 +7,16 @@ One spec shape for every format, so an agent or the UI describes content once:
         {"type": "heading", "text": "Summary", "level": 1},
         {"type": "paragraph", "text": "Revenue grew 12%."},
         {"type": "bullets", "items": ["North +20%", "South +4%"]},
-        {"type": "table", "rows": [["Region", "Revenue"], ["North", 120]]}
+        {"type": "table", "rows": [["Region", "Revenue"], ["North", 120]]},
+        {"type": "chart", "kind": "bar", "categories": ["North", "South"],
+         "series": [{"name": "Revenue", "values": [120, 80]}]}
      ]}
 
 Spreadsheets take ``{"sheets": [{"name": "Data", "rows": [[...], ...]}]}``
-(``rows`` alone means one sheet); the first row is the header. Slides take
-``{"slides": [{"title": "...", "bullets": [...]} | {"title": "...", "table": rows}]}``,
-and ``blocks`` work too (one slide per heading).
+(``rows`` alone means one sheet); the first row is the header, and a sheet's
+``charts`` list draws from its columns. Slides take ``{"slides": [{"title": "...",
+"bullets": [...]} | {"title": "...", "table": rows} | {"title": "...", "chart": {...}}]}``,
+and ``blocks`` work too (one slide per heading). Chart specs: src/file_charts.py.
 
 build_file() returns the bytes; it never touches disk or the network.
 Libraries (all MIT/BSD): openpyxl, python-docx, python-pptx, reportlab.
@@ -25,6 +28,9 @@ import io
 import re
 from dataclasses import dataclass
 from typing import Any
+
+from src import file_charts
+from src.file_charts import ChartSpecError
 
 FORMATS = {
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -98,13 +104,13 @@ def _blocks(spec: dict) -> list[dict]:
         raise FileSpecError(f"'blocks' must be a list of at most {MAX_BLOCKS} items")
     out = []
     for i, b in enumerate(blocks):
-        if not isinstance(b, dict) or b.get("type") not in {"heading", "paragraph", "bullets", "table"}:
-            raise FileSpecError(f"block {i}: type must be heading, paragraph, bullets or table")
+        if not isinstance(b, dict) or b.get("type") not in {"heading", "paragraph", "bullets", "table", "chart"}:
+            raise FileSpecError(f"block {i}: type must be heading, paragraph, bullets, table or chart")
         out.append(b)
     return out
 
 
-def _sheets(spec: dict) -> list[tuple[str, list[list[Any]]]]:
+def _sheets(spec: dict) -> list[tuple[str, list[list[Any]], list]]:
     sheets = spec.get("sheets")
     if sheets is None:
         if "rows" not in spec:
@@ -123,7 +129,11 @@ def _sheets(spec: dict) -> list[tuple[str, list[list[Any]]]]:
             name = f"{base[:28]}_{n}"
             n += 1
         seen.add(name.lower())
-        out.append((name, _rows(sh.get("rows", []), f"sheet '{name}'")))
+        charts = sh.get("charts") or []
+        if not isinstance(charts, list) or len(charts) > file_charts.MAX_CHARTS_PER_SHEET:
+            raise FileSpecError(f"sheet '{name}': 'charts' must be a list of at most "
+                                f"{file_charts.MAX_CHARTS_PER_SHEET}")
+        out.append((name, _rows(sh.get("rows", []), f"sheet '{name}'"), charts))
     return out
 
 
@@ -136,7 +146,7 @@ def _xlsx(spec: dict) -> bytes:
 
     wb = Workbook()
     wb.remove(wb.active)
-    for name, rows in _sheets(spec):
+    for name, rows, charts in _sheets(spec):
         ws = wb.create_sheet(title=name)
         for r in rows:
             ws.append([_formula_safe(_cell(v)) for v in r])
@@ -148,6 +158,15 @@ def _xlsx(spec: dict) -> bytes:
                 width = max((len(str(r[idx - 1])) for r in rows if len(r) >= idx and r[idx - 1] is not None),
                             default=8)
                 ws.column_dimensions[get_column_letter(idx)].width = min(max(width + 2, 8), 60)
+        for i, c in enumerate(charts):
+            where = f"sheet '{name}' chart {i}"
+            if len(rows) < 2:
+                raise FileSpecError(f"{where}: the sheet needs a header row and data")
+            kind, x, y = file_charts.sheet_columns(c, rows[0], where)
+            anchor = c.get("anchor") or f"{get_column_letter(len(rows[0]) + 2)}{2 + 20 * i}"
+            if not re.fullmatch(r"[A-Z]{1,3}[1-9][0-9]{0,6}", str(anchor)):
+                raise FileSpecError(f"{where}: anchor must be a cell like H2")
+            file_charts.add_xlsx_chart(ws, kind, x, y, len(rows), _text(c.get("title")), anchor)
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -199,6 +218,11 @@ def _docx(spec: dict) -> bytes:
             for c in table.rows[0].cells:
                 for run in c.paragraphs[0].runs:
                     run.bold = True
+        elif kind == "chart":
+            from docx.shared import Inches
+
+            png = file_charts.render_png(file_charts.parse(b, "chart"))
+            doc.add_picture(io.BytesIO(png), width=Inches(6.3))
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue()
@@ -244,6 +268,8 @@ def _pdf(spec: dict) -> bytes:
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ]))
             flow.append(t)
+        elif kind == "chart":
+            flow.append(file_charts.pdf_drawing(file_charts.parse(b, "chart"), 170 * mm, 95 * mm))
         flow.append(Spacer(1, 3 * mm))
     buf = io.BytesIO()
     SimpleDocTemplate(buf, pagesize=A4, title=_text(spec.get("title") or ""),
@@ -271,6 +297,8 @@ def _slides_from(spec: dict) -> list[dict]:
             out[-1]["bullets"].extend(_text(i) for i in b.get("items") or [])
         elif b["type"] == "table":
             out.append({"title": out[-1]["title"], "table": b.get("rows", [])})
+        elif b["type"] == "chart":
+            out.append({"title": b.get("title") or out[-1]["title"], "chart": b})
     return out
 
 
@@ -291,7 +319,13 @@ def _pptx(spec: dict) -> bytes:
     for i, sd in enumerate(slides):
         if not isinstance(sd, dict):
             raise FileSpecError(f"slide {i}: must be an object")
-        if "table" in sd:
+        if "chart" in sd:
+            chart = file_charts.parse(sd["chart"], f"slide {i} chart")
+            s = prs.slides.add_slide(prs.slide_layouts[5])
+            s.shapes.title.text = _text(sd.get("title") or chart.title)
+            file_charts.add_pptx_chart(s, chart, Inches(0.8), Inches(1.5),
+                                       prs.slide_width - Inches(1.6), prs.slide_height - Inches(2.0))
+        elif "table" in sd:
             rows = _rows(sd["table"], f"slide {i} table")
             s = prs.slides.add_slide(prs.slide_layouts[5])
             s.shapes.title.text = _text(sd.get("title"))
@@ -335,6 +369,8 @@ def build_file(fmt: str, spec: dict) -> BuiltFile:
         data = _BUILDERS[fmt](spec)
     except FileSpecError:
         raise
+    except ChartSpecError as e:
+        raise FileSpecError(str(e)) from e
     except ImportError as e:
         raise FileSpecError(f"{fmt} support is not installed ({e.name}); "
                             "run pip install -r requirements.txt") from e

@@ -61,3 +61,5 @@ openpyxl
 python-docx
 python-pptx
 reportlab
+# Chart images in Word files (src/file_charts.py); also a reportlab dependency. MIT-CMU.
+Pillow
