@@ -2229,9 +2229,38 @@ def _migrate_backfill_task_folders():
         logging.getLogger(__name__).warning(f"task folder backfill: {e}")
 
 
+# PostgreSQL full-text search over chat messages. The index and every query
+# must use this exact expression, or PostgreSQL will not use the index.
+# 'simple' = no stemming, so it works for any language. Inline media is left
+# out and long messages are cut, because to_tsvector fails on values over 1 MB
+# and an index that fails would block saving the message.
+PG_CHAT_SEARCH_VECTOR = (
+    "to_tsvector('simple'::regconfig, left(CASE "
+    "WHEN strpos(COALESCE(content, ''), ';base64,') > 0 "
+    "OR strpos(COALESCE(content, ''), 'data:image/') > 0 "
+    "OR strpos(COALESCE(content, ''), 'data:audio/') > 0 "
+    "THEN '' ELSE COALESCE(content, '') END, 100000))"
+)
+
+
+def _migrate_chat_messages_pg_search():
+    """GIN index for chat history search on PostgreSQL (SQLite uses FTS5)."""
+    if not DATABASE_URL.startswith("postgresql"):
+        return
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                f"CREATE INDEX IF NOT EXISTS ix_chat_messages_search ON chat_messages "
+                f"USING gin ({PG_CHAT_SEARCH_VECTOR})"
+            ))
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"chat_messages search index skipped: {e}")
+
+
 def _migrate_chat_messages_fts():
     """Create and backfill the session transcript FTS index for SQLite."""
     if not DATABASE_URL.startswith("sqlite"):
+        _migrate_chat_messages_pg_search()
         return
 
     db_path = DATABASE_URL.replace("sqlite:///", "")

@@ -144,3 +144,52 @@ def test_app_schema_and_migrations_start_cleanly_on_postgres(tmp_path, empty_pg_
     assert proc.returncode == 0, proc.stderr
     # The startup migrations used to log a PRAGMA syntax error each on PostgreSQL.
     assert "PRAGMA" not in proc.stderr
+
+
+_SEARCH_SCRIPT = r'''
+import json
+from datetime import datetime, timedelta
+from sqlalchemy import text
+from core.database import SessionLocal, Session, ChatMessage, engine
+from src.session_search import search_session_messages
+
+db = SessionLocal()
+t0 = datetime(2026, 10, 1)
+db.add_all([Session(id="sa", name="Budget", owner="alice", endpoint_url="x", model="m"), Session(id="sb", name="Other", owner="bob", endpoint_url="x", model="m"),
+            Session(id="sc", name="Old", owner="alice", archived=True, endpoint_url="x", model="m")])
+db.flush()
+msgs = [("m1", "sa", "user", "What is the Q3 marketing budget for the north region?"),
+        ("m2", "sa", "assistant", "The north region budget is 40k."),
+        ("m3", "sb", "user", "bob's budget for the north region"),
+        ("m4", "sc", "user", "archived budget north"),
+        ("m5", "sa", "user", "data:image/png;base64," + "A" * 3_000_000),
+        ("m6", "sa", "user", "x " * 600_000)]
+for i, (mid, sid, role, content) in enumerate(msgs):
+    db.add(ChatMessage(id=mid, session_id=sid, role=role, content=content, timestamp=t0 + timedelta(minutes=i)))
+db.commit()
+out = {q: [r.message_id for r in search_session_messages(q, owner="alice", db=db)]
+       for q in ["north budget", "\"north region\"", "budget -north", "or", "région", "nothing-here"]}
+out["archived"] = [r.message_id for r in search_session_messages("north budget", owner="alice",
+                                                                 include_archived=True, db=db)]
+out["snippet"] = search_session_messages("north budget", owner="alice", db=db)[0].content_snippet
+with engine.connect() as c:
+    out["index"] = c.execute(text("SELECT indexname FROM pg_indexes WHERE indexname = 'ix_chat_messages_search'")).scalar()
+print("RESULT" + json.dumps(out))
+'''
+
+
+@_live
+def test_history_search_uses_postgres_full_text(tmp_path, empty_pg_database):
+    proc = _run(["-c", _SEARCH_SCRIPT], tmp_path, DATABASE_URL=empty_pg_database)
+    assert proc.returncode == 0, proc.stderr
+    import json
+    out = json.loads(proc.stdout.split("RESULT", 1)[1])
+    assert out["index"] == "ix_chat_messages_search"
+    # Words in any order, owner-scoped, archived sessions only when asked.
+    assert set(out["north budget"]) == {"m1", "m2"}
+    assert set(out["archived"]) == {"m1", "m2", "m4"}
+    assert set(out['"north region"']) == {"m1", "m2"}
+    # Operators in ordinary text do not turn into NOT / OR.
+    assert set(out["budget -north"]) == {"m1", "m2"}
+    assert out["nothing-here"] == []
+    assert "north" in out["snippet"].lower()

@@ -67,7 +67,15 @@ def _snippet(content: str, query: str, radius: int = 60) -> str:
     if not query:
         return content[: radius * 2]
 
-    idx = content.lower().find(query.lower())
+    lowered = content.lower()
+    idx = lowered.find(query.lower())
+    if idx == -1:
+        # Word search matches words anywhere: centre on the first one found.
+        for word in re.findall(r"\w+", query, flags=re.UNICODE):
+            idx = lowered.find(word.lower())
+            if idx != -1:
+                query = word
+                break
     if idx == -1:
         return content[: radius * 2]
 
@@ -111,6 +119,89 @@ def _is_sqlite_session(db) -> bool:
         return getattr(getattr(bind, "dialect", None), "name", None) == "sqlite"
     except Exception:
         return False
+
+
+def _is_postgres_session(db) -> bool:
+    try:
+        return getattr(getattr(db.get_bind(), "dialect", None), "name", None) == "postgresql"
+    except Exception:
+        return False
+
+
+def _pg_tsquery(query: str) -> str | None:
+    """Plain words and quoted phrases for websearch_to_tsquery.
+
+    websearch_to_tsquery never raises on user input, but drop everything
+    except words and quotes anyway so "-" and "or" cannot change the meaning
+    of an ordinary search.
+    """
+    parts = []
+    for match in re.finditer(r'"([^"]+)"|[\w]+', query, flags=re.UNICODE):
+        phrase = match.group(1)
+        if phrase is not None:
+            words = re.findall(r"\w+", phrase, flags=re.UNICODE)
+            if words:
+                parts.append('"' + " ".join(words) + '"')
+        elif match.group(0).lower() != "or":
+            parts.append(match.group(0))
+    return " ".join(parts) or None
+
+
+def _search_pg(
+    db,
+    query: str,
+    limit: int,
+    owner: str | None,
+    include_archived: bool,
+    context_messages: int,
+    restrict_owner: bool,
+    include_legacy_owner: bool,
+) -> list[SessionSearchResult] | None:
+    """Ranked word search on PostgreSQL, using the GIN index from init_db."""
+    from core.database import PG_CHAT_SEARCH_VECTOR
+
+    ts_query = _pg_tsquery(query)
+    if not ts_query or not _is_postgres_session(db):
+        return None
+    archived_clause = "" if include_archived else "AND s.archived = false"
+    if not restrict_owner:
+        owner_clause = ""
+    elif owner is None:
+        owner_clause = "AND s.owner IS NULL"
+    elif not include_legacy_owner:
+        owner_clause = "AND s.owner = :owner"
+    else:
+        owner_clause = "AND (s.owner = :owner OR s.owner IS NULL)"
+    params: dict[str, Any] = {"q": ts_query, "limit": limit}
+    if restrict_owner and owner is not None:
+        params["owner"] = owner
+    vector = PG_CHAT_SEARCH_VECTOR.replace("content", "m.content")
+    sql = text(
+        f"""
+        SELECT m.id
+        FROM chat_messages m
+        JOIN sessions s ON s.id = m.session_id,
+             websearch_to_tsquery('simple'::regconfig, :q) AS tsq
+        WHERE {vector} @@ tsq
+          {archived_clause}
+          {owner_clause}
+          AND s.name NOT LIKE 'SFT trace batch%'
+          AND m.role IN ('user', 'assistant')
+        ORDER BY ts_rank({vector}, tsq) DESC, m.timestamp DESC
+        LIMIT :limit
+        """
+    )
+    try:
+        hits = [row[0] for row in db.execute(sql, params).fetchall()]
+    except Exception as e:
+        db.rollback()
+        logger.debug("PostgreSQL session search failed; falling back to LIKE: %s", e)
+        return None
+    if not hits:
+        return None
+    by_id = _fetch_messages_by_id(db, hits)
+    rows = [(by_id[h][0], by_id[h][1], "") for h in hits if h in by_id]
+    return _rows_to_results(db, rows, query, context_messages)
 
 
 def _has_fts_table(db) -> bool:
@@ -323,7 +414,7 @@ def search_session_messages(
     if owns_db:
         db = SessionLocal()
     try:
-        fts_results = _search_fts(
+        fts_results = (_search_pg if _is_postgres_session(db) else _search_fts)(
             db,
             query,
             limit,
