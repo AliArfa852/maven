@@ -2032,12 +2032,15 @@ body.bg-pattern-sparkles {
       letter-spacing:0.03em;
       margin-bottom:10px;
     }
-    .welcome-boat {
+    .welcome-mark {
       width: 1.8rem;
       height: 1.8rem;
       margin-right: 0.4rem;
       vertical-align: -0.15em;
-      color: var(--brand-color, var(--red));
+      color: var(--fg);
+    }
+    .welcome-mark-dot {
+      fill: var(--brand-color, var(--red));
     }
     #welcome-screen .welcome-sub {
       font-size:0.85rem;
