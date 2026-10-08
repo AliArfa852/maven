@@ -2112,6 +2112,27 @@ class ConversationFlag(Base):
     review_note = Column(Text, nullable=True)
 
 
+class AuditEvent(Base):
+    """Append-only, hash-chained record of security-relevant actions (src/audit.py).
+
+    Each row's ``hash`` covers its own fields and the previous row's hash, so
+    editing or deleting a past row breaks the chain from that point on. No
+    message content or passwords are stored: who, what, when, from where.
+    """
+    __tablename__ = "audit_events"
+
+    id        = Column(Integer, primary_key=True, autoincrement=True)
+    at        = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    actor     = Column(String, nullable=True, index=True)   # username, or None before login
+    action    = Column(String, nullable=False, index=True)  # e.g. auth.login.failed, http.PUT
+    target    = Column(String, nullable=True)               # e.g. a path or username
+    outcome   = Column(String, nullable=False, default="ok")  # ok / denied / failed / error
+    ip        = Column(String, nullable=True)
+    detail    = Column(Text, nullable=True)                 # small JSON object
+    prev_hash = Column(String, nullable=False, default="")
+    hash      = Column(String, nullable=False)
+
+
 def init_db():
     """
     Initialize the database by creating all tables.

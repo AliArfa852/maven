@@ -251,9 +251,36 @@ class _SlowRequestLogMiddleware(_BaseHTTPMiddleware):
                 )
 
 
+class _AuditMiddleware(_BaseHTTPMiddleware):
+    """Record security-relevant requests in the audit log (src/audit.py).
+
+    Added before AuthMiddleware, so it runs inside it and sees the user.
+    """
+
+    async def dispatch(self, request, call_next):
+        from src import audit
+
+        path = get_application_route_path(request.scope)
+        if not audit.should_audit(request.method, path):
+            return await call_next(request)
+        status = 500
+        try:
+            response = await call_next(request)
+            status = getattr(response, "status_code", 0) or 0
+            return response
+        finally:
+            outcome = "ok" if status < 400 else "denied" if status in (401, 403) else "failed"
+            await asyncio.to_thread(
+                audit.record, f"http.{request.method}",
+                actor=getattr(request.state, "current_user", None), target=path,
+                outcome=outcome, ip=audit.client_ip(request), detail={"status": status},
+            )
+
+
 app.add_middleware(_RequestTimeoutMiddleware)
 app.add_middleware(_InteractiveActivityMiddleware)
 app.add_middleware(_SlowRequestLogMiddleware)
+app.add_middleware(_AuditMiddleware)
 
 # ========= AUTH =========
 from routes.auth_routes import setup_auth_routes, SESSION_COOKIE
@@ -717,6 +744,8 @@ app.include_router(setup_file_routes())
 # Flagged-conversation review (Compliance Officers; Admin console)
 from routes.compliance_routes import setup_compliance_routes
 app.include_router(setup_compliance_routes())
+from routes.audit_routes import setup_audit_routes
+app.include_router(setup_audit_routes())
 
 # Admin Danger Zone wipes (Settings → System → Danger Zone)
 from routes.admin_wipe.admin_wipe_routes import setup_admin_wipe_routes

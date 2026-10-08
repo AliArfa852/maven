@@ -193,3 +193,18 @@ def test_history_search_uses_postgres_full_text(tmp_path, empty_pg_database):
     assert set(out["budget -north"]) == {"m1", "m2"}
     assert out["nothing-here"] == []
     assert "north" in out["snippet"].lower()
+
+
+@_live
+def test_audit_chain_on_postgres(tmp_path, empty_pg_database):
+    script = (
+        "from src import audit\n"
+        "from concurrent.futures import ThreadPoolExecutor\n"
+        "with ThreadPoolExecutor(8) as ex:\n"
+        "    assert all(ex.map(lambda i: audit.record('auth.login', target=f'u{i}'), range(40)))\n"
+        "r = audit.verify_chain()\n"
+        "print('RESULT', r['ok'], r['count'])\n"
+    )
+    proc = _run(["-c", script], tmp_path, DATABASE_URL=empty_pg_database)
+    assert proc.returncode == 0, proc.stderr
+    assert "RESULT True 40" in proc.stdout

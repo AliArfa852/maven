@@ -114,6 +114,36 @@
       <p id="ac-settings-status" class="status"></p>
     </section>
 
+    <section id="ac-audit" hidden>
+      <h2>Audit log</h2>
+      <p class="sub">Sign-ins, access changes, compliance decisions and other admin actions: who, what, when and from where. No message content. Each entry is chained to the one before, so a changed or removed entry shows up when you check integrity.</p>
+      <p>
+        <label for="ac-audit-filter" class="sub" style="margin:0">Show</label>
+        <select id="ac-audit-filter">
+          <option value="">Everything</option>
+          <option value="auth.login">Sign-ins</option>
+          <option value="access.">Role and clearance changes</option>
+          <option value="http.">Admin requests</option>
+        </select>
+        <select id="ac-audit-outcome">
+          <option value="">Any outcome</option>
+          <option value="ok">Succeeded</option>
+          <option value="failed">Failed</option>
+          <option value="denied">Denied</option>
+        </select>
+        <button id="ac-audit-verify">Check integrity</button>
+        <span id="ac-audit-chain" class="sub"></span>
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>When</th><th>Who</th><th>What</th><th>Target</th><th>Outcome</th><th>From</th></tr></thead>
+          <tbody id="ac-audit-rows"></tbody>
+        </table>
+      </div>
+      <p><button id="ac-audit-more" hidden>Older entries</button></p>
+      <p id="ac-audit-status" class="status"></p>
+    </section>
+
     <section id="ac-roles" hidden>
       <h2>Roles</h2>
       <p class="sub">Default clearance and console access for each role.</p>

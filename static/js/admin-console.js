@@ -256,6 +256,79 @@ async function saveSettings() {
   }
 }
 
+// ── Audit log (admin.view or compliance.review) ──
+
+const AUDIT_LABELS = {
+  'auth.login': 'Sign-in',
+  'access.roles': 'Roles changed',
+  'access.clearance': 'Clearance changed',
+};
+let auditBefore = null;
+
+function auditWhat(e) {
+  if (AUDIT_LABELS[e.action]) return AUDIT_LABELS[e.action];
+  if (e.action.startsWith('http.')) return `${e.action.slice(5)} request`;
+  return e.action;
+}
+
+function auditDetail(e) {
+  const d = e.detail || {};
+  if (e.action === 'access.roles' && d.after) return `${(d.before || []).join(', ') || 'none'} → ${d.after.join(', ')}`;
+  if (e.action === 'access.clearance') return d.override ? `set to ${d.override}` : 'reset to role default';
+  if (d.reason) return d.reason;
+  return '';
+}
+
+async function loadAudit(more = false) {
+  const status = el('ac-audit-status');
+  status.className = 'status';
+  status.textContent = 'Loading…';
+  const params = new URLSearchParams({ limit: '100' });
+  if (el('ac-audit-filter').value) params.set('action', el('ac-audit-filter').value);
+  if (el('ac-audit-outcome').value) params.set('outcome', el('ac-audit-outcome').value);
+  if (more && auditBefore) params.set('before_id', String(auditBefore));
+  try {
+    const data = await api(`/api/audit/events?${params}`);
+    const rows = el('ac-audit-rows');
+    if (!more) rows.replaceChildren();
+    for (const e of data.events || []) {
+      const tr = node('tr');
+      tr.append(node('td', e.at ? new Date(e.at).toLocaleString() : ''), node('td', e.actor || '—'));
+      const what = node('td', auditWhat(e));
+      const extra = auditDetail(e);
+      if (extra) what.append(node('div', extra, 'sub'));
+      tr.append(what, node('td', e.target || '', 'excerpt'),
+        node('td', e.outcome, e.outcome === 'ok' ? '' : 'sev-high'), node('td', e.ip || ''));
+      rows.append(tr);
+    }
+    auditBefore = data.next_before_id;
+    el('ac-audit-more').hidden = !auditBefore;
+    status.textContent = rows.children.length ? '' : 'Nothing recorded yet.';
+  } catch (err) {
+    status.className = 'status error';
+    status.textContent = err.message;
+  }
+}
+
+async function verifyAudit() {
+  const out = el('ac-audit-chain');
+  out.className = 'sub';
+  out.textContent = 'Checking…';
+  try {
+    const r = await api('/api/audit/verify');
+    if (r.ok) {
+      out.textContent = `Intact: ${r.count} entries. Latest hash ${r.head ? r.head.slice(0, 16) + '…' : 'none'}`;
+      out.title = r.head || '';
+    } else {
+      out.className = 'sub error';
+      out.textContent = `Broken at entry ${r.first_bad_id}: ${r.reason}`;
+    }
+  } catch (err) {
+    out.className = 'sub error';
+    out.textContent = err.message;
+  }
+}
+
 async function load() {
   const brand = window.MAVEN_BRAND ? window.MAVEN_BRAND.name : '';
   el('ac-title').textContent = brand ? `${brand} Admin Console` : 'Admin Console';
@@ -287,6 +360,13 @@ async function load() {
       el('ac-flags-status').textContent = `Flagging rules: ${err.message}`;
     });
   }
+
+  el('ac-audit').hidden = false;
+  el('ac-audit-filter').addEventListener('change', () => loadAudit());
+  el('ac-audit-outcome').addEventListener('change', () => loadAudit());
+  el('ac-audit-more').addEventListener('click', () => loadAudit(true));
+  el('ac-audit-verify').addEventListener('click', verifyAudit);
+  loadAudit();
 
   const [catalogue, users] = await Promise.all([api('/api/auth/roles'), api('/api/auth/users')]);
   renderRoles(catalogue);

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from core.atomic_io import atomic_write_json, atomic_write_text
 from core.auth import AccessChangeResult, AuthManager, RESERVED_USERNAMES, SetAdminResult, TOKEN_TTL
-from src import access
+from src import access, audit
 from src.brand import BRAND_NAME
 from src.constants import DEEP_RESEARCH_DIR, MEMORY_FILE, PASSWORD_MIN_LENGTH, SKILLS_DIR
 from src.rate_limiter import RateLimiter
@@ -188,13 +188,20 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
             raise HTTPException(409, "Username already taken")
         return {"ok": True, "message": "Account created"}
 
+    def _audit_login(outcome: str, username: str, request: Request, why: str | None = None):
+        audit.record("auth.login", actor=username if outcome == "ok" else None, target=username,
+                     outcome=outcome, ip=audit.client_ip(request),
+                     detail={"reason": why} if why else None)
+
     @router.post("/login")
     async def login(body: LoginRequest, request: Request, response: Response):
-        if not _login_limiter.check(request.client.host):
-            raise HTTPException(429, "Too many requests — try again later")
         # Verify password first
         username = body.username.strip().lower()
+        if not _login_limiter.check(request.client.host):
+            await asyncio.to_thread(_audit_login, "denied", username, request, "rate limited")
+            raise HTTPException(429, "Too many requests — try again later")
         if not await asyncio.to_thread(auth_manager.verify_password, username, body.password):
+            await asyncio.to_thread(_audit_login, "failed", username, request, "bad password or unknown user")
             raise HTTPException(401, "Invalid credentials")
         # Check 2FA if enabled
         if auth_manager.totp_enabled(username):
@@ -202,6 +209,7 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
                 # Password OK but need TOTP — tell client to show code input
                 return {"ok": False, "requires_totp": True, "username": username}
             if not auth_manager.totp_verify(username, body.totp_code):
+                await asyncio.to_thread(_audit_login, "failed", username, request, "bad 2FA code")
                 raise HTTPException(401, "Invalid 2FA code")
         # All checks passed — create session (password already verified above)
         token = await asyncio.to_thread(auth_manager.create_session_trusted, username)
@@ -218,6 +226,7 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
         if body.remember:
             cookie_kwargs["max_age"] = TOKEN_TTL
         response.set_cookie(**cookie_kwargs)
+        await asyncio.to_thread(_audit_login, "ok", username, request)
         return {"ok": True, "username": username}
 
     @router.post("/logout")
@@ -359,9 +368,13 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
         user = _get_current_user(request)
         if not user or not auth_manager.is_admin(user):
             raise HTTPException(403, "Admin only")
+        target = (username or "").strip().lower()
+        before = auth_manager.get_roles(target) if target in auth_manager.users else []
         result = auth_manager.set_roles(username, body.roles, user)
         _raise_on_access_refusal(result)
-        target = (username or "").strip().lower()
+        await asyncio.to_thread(audit.record, "access.roles", actor=user, target=target,
+                                ip=audit.client_ip(request),
+                                detail={"before": before, "after": auth_manager.get_roles(target)})
         return {"ok": True, "self": target == user, **auth_manager.access_summary(target)}
 
     @router.put("/users/{username}/clearance")
@@ -372,6 +385,9 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
             raise HTTPException(403, "Admin only")
         result = auth_manager.set_clearance(username, body.clearance, user)
         _raise_on_access_refusal(result)
+        await asyncio.to_thread(audit.record, "access.clearance", actor=user,
+                                target=(username or "").strip().lower(), ip=audit.client_ip(request),
+                                detail={"override": body.clearance})
         return {"ok": True, **auth_manager.access_summary((username or "").strip().lower())}
 
     @router.post("/users")
