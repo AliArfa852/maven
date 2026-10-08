@@ -287,8 +287,8 @@ export function applyColors(colors) {
     s.setProperty(css, adv[key] || defaults[key]);
   }
 
-  // Update favicon to match theme accent color
-  _updateFavicon(colors.red || '#e06c75');
+  // Update favicon to match theme colors
+  _updateFavicon(colors.red || '#e06c75', colors.fg || '#9cdef2', colors.bg || '#282c34');
 }
 
 // Per-route SVG shape registry — kept in sync with the inline favicon
@@ -329,14 +329,14 @@ const _ROUTE_FAVICON_SHAPES = {
     "<rect x='21' y='8' width='6' height='19' rx='1' fill='none' stroke='__C__' stroke-width='2.5' transform='rotate(8 24 17)'/>",
 };
 
-function _updateFavicon(fg) {
+function _updateFavicon(accent, fg, bg) {
   const path = (window.location.pathname || '').toLowerCase();
   const routeShape = _ROUTE_FAVICON_SHAPES[path];
   let svg;
   if (routeShape) {
-    svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>${routeShape.split('__C__').join(fg)}</svg>`;
+    svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>${routeShape.split('__C__').join(accent)}</svg>`;
   } else {
-    svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M16 4L16 22L6 22Z' fill='${fg}'/><path d='M16 8L16 22L24 22Z' fill='${fg}' opacity='0.6'/><path d='M4 24Q10 20 16 24Q22 28 28 24' stroke='${fg}' stroke-width='2.5' fill='none' stroke-linecap='round'/></svg>`;
+    svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='${fg}'/><polyline points='18,46 18,20 32,34 46,20 46,46' fill='none' stroke='${bg}' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/></svg>`;
   }
   const href = 'data:image/svg+xml,' + encodeURIComponent(svg);
   let link = document.querySelector("link[rel='icon']");
