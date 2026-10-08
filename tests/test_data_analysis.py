@@ -145,11 +145,14 @@ class _Uploads:
         return None
 
 
-def _run_tool(monkeypatch, handler, args, ctx):
+def _run_tool(monkeypatch, handler, args, ctx, attached=(("abc.xlsx", "sales.xlsx"),)):
+    import src.agent_tools.file_tools as file_tools
     import src.tool_utils as tool_utils
     from src.agent_tools import TOOL_HANDLERS
 
     monkeypatch.setattr(tool_utils, "get_upload_handler", lambda: handler)
+    monkeypatch.setattr(file_tools, "chat_upload_ids", lambda sid, owner: list(attached))
+    ctx = {"session_id": "s1", **ctx}
     return asyncio.run(TOOL_HANDLERS["analyze_data"](json.dumps(args), ctx))
 
 
@@ -165,8 +168,34 @@ def test_tool_reads_only_the_callers_upload(tmp_path, monkeypatch):
     assert h.calls == [False, False]  # never the admin override
     bad = _run_tool(monkeypatch, h, {"file_id": "abc.xlsx", "operation": "group", "group_by": ["x"]}, {"owner": "alice"})
     assert bad["exit_code"] == 1 and "No column named" in bad["error"]
-    missing = _run_tool(monkeypatch, h, {"operation": "describe"}, {"owner": "alice"})
-    assert missing["exit_code"] == 1 and "file_id" in missing["error"]
+    # No file_id: the newest spreadsheet attached to the chat.
+    auto = _run_tool(monkeypatch, h, {"operation": "describe"}, {"owner": "alice"})
+    assert auto["exit_code"] == 0
+    none = _run_tool(monkeypatch, h, {"operation": "describe"}, {"owner": "alice"}, attached=[])
+    assert none["exit_code"] == 1 and "No spreadsheet is attached" in none["error"]
+
+
+def test_tool_refuses_files_not_attached_to_this_chat(tmp_path, monkeypatch):
+    p = tmp_path / "abc.xlsx"
+    _sales_xlsx(p)
+    h = _Uploads(str(p), "alice")
+    out = _run_tool(monkeypatch, h, {"file_id": "abc.xlsx", "operation": "describe"}, {"owner": "alice"},
+                    attached=[("other.xlsx", "other.xlsx")])
+    assert out["exit_code"] == 1 and "not attached to this chat" in out["error"]
+    assert h.calls == []  # refused before the upload store was touched
+    no_chat = asyncio.run(__import__("src.agent_tools", fromlist=["TOOL_HANDLERS"]).TOOL_HANDLERS["analyze_data"](
+        json.dumps({"file_id": "abc.xlsx", "operation": "describe"}), {"owner": "alice"}))
+    assert no_chat["exit_code"] == 1
+
+
+def test_chat_reads_pass_the_external_context_gate_but_private_reads_do_not():
+    from src.tool_capabilities import ToolRunSecurityContext
+
+    gate = ToolRunSecurityContext(external_untrusted_context_seen=True)
+    assert gate.decision_for("analyze_data", "{}").allowed
+    assert gate.decision_for("search_chat_files", "{}").allowed
+    assert not gate.decision_for("read_email", "{}").allowed
+    assert not gate.decision_for("web_fetch", "{}").allowed
 
 
 def test_latest_spreadsheet_in_the_chat(tmp_path, monkeypatch):
@@ -203,7 +232,7 @@ def test_tool_registration():
     from src.tool_security import NON_ADMIN_BLOCKED_TOOLS, PLAN_MODE_READONLY_TOOLS
 
     caps = capabilities_for_action("analyze_data", "{}")
-    assert caps.effects == {ToolEffect.READ_PRIVATE}
+    assert caps.effects == {ToolEffect.READ_SESSION}
     assert caps.result_integrity is ResultIntegrity.EXTERNAL_UNTRUSTED
     assert "analyze_data" in PLAN_MODE_READONLY_TOOLS and "analyze_data" not in NON_ADMIN_BLOCKED_TOOLS
     assert any(s["function"]["name"] == "analyze_data" for s in FUNCTION_TOOL_SCHEMAS)

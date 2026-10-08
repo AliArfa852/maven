@@ -65,8 +65,8 @@ class SearchChatFilesTool:
 TABLE_EXTENSIONS = (".xlsx", ".xlsm", ".csv", ".tsv")
 
 
-def latest_table_upload(session_id: str, owner) -> str | None:
-    """Id of the newest spreadsheet attached to this chat by this user."""
+def chat_upload_ids(session_id: str, owner) -> list[tuple[str, str]]:
+    """(upload id, name) of files this user attached to this chat, newest first."""
     import json as _json
 
     from core.database import ChatMessage, Session, SessionLocal
@@ -76,22 +76,29 @@ def latest_table_upload(session_id: str, owner) -> str | None:
     try:
         sess = db.query(Session.owner).filter(Session.id == session_id).first()
         if sess is None or sess[0] != owner:
-            return None
+            return []
         rows = (db.query(ChatMessage.meta_data)
                 .filter(ChatMessage.session_id == session_id, ChatMessage.role == "user",
                         ChatMessage.meta_data.isnot(None))
                 .order_by(ChatMessage.timestamp.desc()).limit(200).all())
     finally:
         db.close()
+    out = []
     for (raw,) in rows:
         try:
             meta = _json.loads(raw) if isinstance(raw, str) else (raw or {})
         except ValueError:
             continue
         for ref in reversed(attachment_refs_from_metadata(meta if isinstance(meta, dict) else {})):
-            name = str(ref.get("name") or ref.get("attachment_id") or "").lower()
-            if name.endswith(TABLE_EXTENSIONS) or str(ref.get("attachment_id", "")).lower().endswith(TABLE_EXTENSIONS):
-                return ref["attachment_id"]
+            out.append((ref["attachment_id"], str(ref.get("name") or ref["attachment_id"])))
+    return out
+
+
+def latest_table_upload(session_id: str, owner) -> str | None:
+    """Id of the newest spreadsheet attached to this chat by this user."""
+    for upload_id, name in chat_upload_ids(session_id, owner):
+        if name.lower().endswith(TABLE_EXTENSIONS) or upload_id.lower().endswith(TABLE_EXTENSIONS):
+            return upload_id
     return None
 
 
@@ -107,12 +114,21 @@ class AnalyzeDataTool:
         except ValueError:
             return {"error": "Invalid JSON arguments", "exit_code": 1}
         file_id = str(args.get("file_id") or args.get("upload_id") or args.get("id") or "").strip()
-        if not file_id and ctx.get("session_id"):
-            file_id = await asyncio.to_thread(latest_table_upload, ctx["session_id"], ctx.get("owner")) or ""
+        session_id = ctx.get("session_id")
+        if not session_id:
+            return {"error": "analyze_data works on files attached to a chat; no chat is active", "exit_code": 1}
+        attached = await asyncio.to_thread(chat_upload_ids, session_id, ctx.get("owner"))
         if not file_id:
-            return {"error": "Need file_id: the id of an uploaded .xlsx or .csv file "
-                             "(listed under 'Uploaded files attached'). No spreadsheet is attached "
-                             "to this chat yet.", "exit_code": 1}
+            file_id = next((u for u, n in attached
+                            if n.lower().endswith(TABLE_EXTENSIONS) or u.lower().endswith(TABLE_EXTENSIONS)), "")
+        if not file_id:
+            return {"error": "No spreadsheet is attached to this chat. Ask the user to attach the "
+                             ".xlsx or .csv file here.", "exit_code": 1}
+        # Only files the user attached to THIS chat: the tool reads what was
+        # already shared here, never the rest of their uploads.
+        if file_id not in {u for u, _ in attached}:
+            return {"error": f"'{file_id}' is not attached to this chat. Attach the file here first.",
+                    "exit_code": 1}
         handler = get_upload_handler()
         if handler is None:
             return {"error": "File storage is not ready", "exit_code": 1}

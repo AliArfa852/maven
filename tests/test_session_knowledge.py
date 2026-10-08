@@ -99,7 +99,7 @@ def test_tool_is_read_only_and_untrusted():
     from src.tool_security import NON_ADMIN_BLOCKED_TOOLS, PLAN_MODE_READONLY_TOOLS
 
     caps = capabilities_for_action("search_chat_files", "{}")
-    assert caps.effects == {ToolEffect.READ_PRIVATE}
+    assert caps.effects == {ToolEffect.READ_SESSION}
     assert caps.result_integrity is ResultIntegrity.EXTERNAL_UNTRUSTED  # file text can carry injections
     assert "search_chat_files" in PLAN_MODE_READONLY_TOOLS
     assert "search_chat_files" not in NON_ADMIN_BLOCKED_TOOLS  # every user can search their own chat
