@@ -350,7 +350,7 @@ def _append_pip_install_runner_lines(runner_lines: list[str], cmd: str) -> None:
     runner_lines.append(f"if {help_check}; then")
     runner_lines.append(f"  {cmd}")
     runner_lines.append("else")
-    runner_lines.append('  echo "[odysseus] pip does not support --break-system-packages; installing without it."')
+    runner_lines.append('  echo "[maven] pip does not support --break-system-packages; installing without it."')
     runner_lines.append(f"  {without_break}")
     runner_lines.append("fi")
 
@@ -817,9 +817,9 @@ def _append_vllm_linux_preflight_lines(runner_lines: list[str]) -> None:
     runner_lines.append('  echo "ERROR: vLLM is not installed."')
     runner_lines.append('  ODYSSEUS_PREFLIGHT_EXIT=127')
     runner_lines.append('else')
-    runner_lines.append('  echo "[odysseus] vLLM CLI: $ODYSSEUS_VLLM_BIN"')
+    runner_lines.append('  echo "[maven] vLLM CLI: $ODYSSEUS_VLLM_BIN"')
     runner_lines.append('  ODYSSEUS_VLLM_VERSION="$("$ODYSSEUS_VLLM_BIN" --version 2>&1 | head -n 1 || true)"')
-    runner_lines.append('  if [ -n "$ODYSSEUS_VLLM_VERSION" ]; then echo "[odysseus] vLLM version: $ODYSSEUS_VLLM_VERSION"; fi')
+    runner_lines.append('  if [ -n "$ODYSSEUS_VLLM_VERSION" ]; then echo "[maven] vLLM version: $ODYSSEUS_VLLM_VERSION"; fi')
     runner_lines.append('fi')
 
 def _append_serve_exit_code_lines(
@@ -878,7 +878,7 @@ def _append_llama_cpp_linux_accel_build_lines(runner_lines: list[str]) -> None:
     # python3 is essentially always present on modern Linux, so this lets
     # the prebuilt path work on minimal Ubuntu installs that lack `unzip`.
     runner_lines.append('    if [ -n "$_odysseus_prebuilt_url" ] && (command -v unzip >/dev/null 2>&1 || command -v bsdtar >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1); then')
-    runner_lines.append('      echo "[odysseus] Found prebuilt llama-server: $_odysseus_prebuilt_url"')
+    runner_lines.append('      echo "[maven] Found prebuilt llama-server: $_odysseus_prebuilt_url"')
     runner_lines.append('      mkdir -p ~/bin "$HOME/.cache/odysseus/llama-cpp-prebuilt" && cd "$HOME/.cache/odysseus/llama-cpp-prebuilt"')
     runner_lines.append('      rm -f llama-cpp.zip')
     runner_lines.append('      if curl -fsSL --max-time 120 "$_odysseus_prebuilt_url" -o llama-cpp.zip && [ -s llama-cpp.zip ]; then')
@@ -891,12 +891,12 @@ def _append_llama_cpp_linux_accel_build_lines(runner_lines: list[str]) -> None:
     runner_lines.append('          _odysseus_libdir="$(dirname "$_odysseus_extracted")"')
     runner_lines.append('          mkdir -p ~/.config && echo "export LD_LIBRARY_PATH=\\"$_odysseus_libdir:\\${LD_LIBRARY_PATH:-}\\"" > ~/.config/odysseus-llama-cpp-env')
     runner_lines.append('          _odysseus_have_prebuilt=1')
-    runner_lines.append('          echo "[odysseus] Prebuilt llama-server installed at $_odysseus_extracted"')
+    runner_lines.append('          echo "[maven] Prebuilt llama-server installed at $_odysseus_extracted"')
     runner_lines.append('        fi')
     runner_lines.append('      fi')
-    runner_lines.append('      [ -z "$_odysseus_have_prebuilt" ] && echo "[odysseus] Prebuilt download/extract failed — falling back to from-source build."')
+    runner_lines.append('      [ -z "$_odysseus_have_prebuilt" ] && echo "[maven] Prebuilt download/extract failed — falling back to from-source build."')
     runner_lines.append('    elif [ -z "$_odysseus_prebuilt_url" ]; then')
-    runner_lines.append('      echo "[odysseus] No matching prebuilt llama-server for this host (arch=$_odysseus_arch) — will build from source."')
+    runner_lines.append('      echo "[maven] No matching prebuilt llama-server for this host (arch=$_odysseus_arch) — will build from source."')
     runner_lines.append('    fi')
     runner_lines.append('  if [ -z "$_odysseus_have_prebuilt" ]; then')
     # Detect pip-installed nvcc (from vLLM/nvidia CUDA wheels) and put it on PATH
@@ -933,19 +933,19 @@ def _append_llama_cpp_linux_accel_build_lines(runner_lines: list[str]) -> None:
     runner_lines.append('      command -v git >/dev/null 2>&1 || _missing="$_missing git"')
     runner_lines.append('      [ -z "$_missing" ] && return 0')
     runner_lines.append('      if command -v apt-get >/dev/null 2>&1 && sudo -n true 2>/dev/null; then')
-    runner_lines.append('        echo "[odysseus] Auto-installing missing build deps via apt:$_missing"')
+    runner_lines.append('        echo "[maven] Auto-installing missing build deps via apt:$_missing"')
     runner_lines.append('        sudo -n env DEBIAN_FRONTEND=noninteractive apt-get update -qq 2>&1 | tail -3')
     runner_lines.append('        sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $_missing 2>&1 | tail -5 || true')
     runner_lines.append('      elif command -v pacman >/dev/null 2>&1 && sudo -n true 2>/dev/null; then')
-    runner_lines.append('        echo "[odysseus] Auto-installing missing build deps via pacman:$_missing"')
+    runner_lines.append('        echo "[maven] Auto-installing missing build deps via pacman:$_missing"')
     runner_lines.append('        local _pacpkgs="$(echo "$_missing" | sed -e \'s/build-essential/base-devel/g\')"')
     runner_lines.append('        sudo -n pacman -Sy --needed --noconfirm $_pacpkgs 2>&1 | tail -5 || true')
     runner_lines.append('      elif command -v dnf >/dev/null 2>&1 && sudo -n true 2>/dev/null; then')
-    runner_lines.append('        echo "[odysseus] Auto-installing missing build deps via dnf:$_missing"')
+    runner_lines.append('        echo "[maven] Auto-installing missing build deps via dnf:$_missing"')
     runner_lines.append('        local _dnfpkgs="$(echo "$_missing" | sed -e \'s/build-essential/gcc gcc-c++ make/g\')"')
     runner_lines.append('        sudo -n dnf install -y $_dnfpkgs 2>&1 | tail -5 || true')
     runner_lines.append('      else')
-    runner_lines.append('        echo "[odysseus] WARNING: missing build deps ($_missing) — passwordless sudo is unavailable, cannot auto-install. Cookbook Diagnosis will explain the fix after the build fails."')
+    runner_lines.append('        echo "[maven] WARNING: missing build deps ($_missing) — passwordless sudo is unavailable, cannot auto-install. Cookbook Diagnosis will explain the fix after the build fails."')
     runner_lines.append('      fi')
     runner_lines.append('    }')
     runner_lines.append('    _odysseus_apt_bootstrap')
@@ -989,7 +989,7 @@ def _append_llama_cpp_linux_accel_build_lines(runner_lines: list[str]) -> None:
     runner_lines.append('        export HIPCXX="${HIPCXX:-$(hipconfig -l)/clang}"')
     runner_lines.append('        export HIP_PATH="${HIP_PATH:-$(hipconfig -R)}"')
     runner_lines.append('      fi')
-    runner_lines.append('      echo "[odysseus] ROCm/HIP detected — building llama-server with HIP support..."')
+    runner_lines.append('      echo "[maven] ROCm/HIP detected — building llama-server with HIP support..."')
     runner_lines.append('      cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_HIP=ON && cmake --build build -j"$NPROC" --target llama-server && ln -sf ~/llama.cpp/build/bin/llama-server ~/bin/llama-server')
     runner_lines.append('    elif command -v nvcc &>/dev/null && _odysseus_has_nvidia_hw; then')
     runner_lines.append('      rm -rf build')
@@ -1008,22 +1008,22 @@ def _append_llama_cpp_linux_accel_build_lines(runner_lines: list[str]) -> None:
     runner_lines.append('        return 1')
     runner_lines.append('      }')
     runner_lines.append('      if _odysseus_has_cudart; then')
-    runner_lines.append('        echo "[odysseus] CUDA nvcc + cudart found — building llama-server with CUDA (GPU) support..."')
+    runner_lines.append('        echo "[maven] CUDA nvcc + cudart found — building llama-server with CUDA (GPU) support..."')
     runner_lines.append('        cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=ON && cmake --build build -j"$NPROC" --target llama-server && ln -sf ~/llama.cpp/build/bin/llama-server ~/bin/llama-server')
     runner_lines.append('      else')
-    runner_lines.append('        echo "[odysseus] WARNING: nvcc found but CUDA runtime (libcudart.so) is not visible — building llama-server for CPU only."')
-    runner_lines.append('        echo "[odysseus]   GPU inference will not be available for this llama.cpp build."')
-    runner_lines.append('        echo "[odysseus]   Ensure libcudart is installed (e.g. cuda-runtime package) and visible via ldconfig or CUDA_HOME."')
+    runner_lines.append('        echo "[maven] WARNING: nvcc found but CUDA runtime (libcudart.so) is not visible — building llama-server for CPU only."')
+    runner_lines.append('        echo "[maven]   GPU inference will not be available for this llama.cpp build."')
+    runner_lines.append('        echo "[maven]   Ensure libcudart is installed (e.g. cuda-runtime package) and visible via ldconfig or CUDA_HOME."')
     runner_lines.append('        cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j"$NPROC" --target llama-server && ln -sf ~/llama.cpp/build/bin/llama-server ~/bin/llama-server')
     runner_lines.append('      fi')
     runner_lines.append('    elif _odysseus_has_vulkan_device && _odysseus_has_vulkan; then')
-    runner_lines.append('      echo "[odysseus] Vulkan-capable GPU detected (no ROCm/CUDA toolchain installed) — building llama-server with Vulkan support..."')
+    runner_lines.append('      echo "[maven] Vulkan-capable GPU detected (no ROCm/CUDA toolchain installed) — building llama-server with Vulkan support..."')
     runner_lines.append('      rm -rf build-vulkan')
     runner_lines.append('      cmake -B build-vulkan -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON && cmake --build build-vulkan -j"$NPROC" --target llama-server && ln -sf ~/llama.cpp/build-vulkan/bin/llama-server ~/bin/llama-server')
     runner_lines.append('    else')
-    runner_lines.append('      echo "[odysseus] WARNING: no HIP/CUDA/Vulkan toolchain found — building llama-server for CPU only."')
-    runner_lines.append('      echo "[odysseus]   GPU inference will not be available for this llama.cpp build."')
-    runner_lines.append('      echo "[odysseus]   Install Vulkan (libvulkan-dev) / ROCm for AMD GPUs or CUDA tooling for NVIDIA, then re-launch this serve task."')
+    runner_lines.append('      echo "[maven] WARNING: no HIP/CUDA/Vulkan toolchain found — building llama-server for CPU only."')
+    runner_lines.append('      echo "[maven]   GPU inference will not be available for this llama.cpp build."')
+    runner_lines.append('      echo "[maven]   Install Vulkan (libvulkan-dev) / ROCm for AMD GPUs or CUDA tooling for NVIDIA, then re-launch this serve task."')
     runner_lines.append('      rm -rf build')
     runner_lines.append('      cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j"$NPROC" --target llama-server && ln -sf ~/llama.cpp/build/bin/llama-server ~/bin/llama-server')
     runner_lines.append('    fi')
@@ -1046,10 +1046,10 @@ def _llama_cpp_rebuild_cmd(update_source: bool = False) -> str:
         update_cmd = (
             'if [ -d "$HOME/llama.cpp/.git" ]; then '
             'git -C "$HOME/llama.cpp" pull --ff-only --depth 1 || '
-            'echo "[odysseus] WARNING: llama.cpp source update failed; clearing cached build anyway."; '
+            'echo "[maven] WARNING: llama.cpp source update failed; clearing cached build anyway."; '
             'elif command -v git >/dev/null 2>&1; then '
             'git clone --depth 1 https://github.com/ggml-org/llama.cpp "$HOME/llama.cpp" || '
-            'echo "[odysseus] WARNING: llama.cpp clone failed; clearing cached build anyway."; '
+            'echo "[maven] WARNING: llama.cpp clone failed; clearing cached build anyway."; '
             'fi && '
         )
     return (
@@ -1057,7 +1057,7 @@ def _llama_cpp_rebuild_cmd(update_source: bool = False) -> str:
         f'{update_cmd}'
         'rm -f "$HOME/bin/llama-server" && '
         'rm -rf "$HOME/llama.cpp/build" "$HOME/llama.cpp/build-vulkan" && '
-        'echo "[odysseus] Cleared the cached llama.cpp build. '
+        'echo "[maven] Cleared the cached llama.cpp build. '
         'Re-launch the serve task to rebuild llama-server from source '
         '(Vulkan, HIP, or CUDA will be used if a matching toolchain is now available)."'
     )
@@ -1376,12 +1376,12 @@ def _diagnose_serve_output(text: str) -> dict | None:
         ),
         (
             r"mlx-lama-swift|odysseus-mlx-inpaint|mlx-lama-serve|LaMa / MI-GAN MLX inpainting models require",
-            "LaMa / MI-GAN MLX inpainting requires an Odysseus-compatible mlx-lama-swift bridge on this Apple Silicon server.",
+            "LaMa / MI-GAN MLX inpainting requires a Maven-compatible mlx-lama-swift bridge on this Apple Silicon server.",
             [{"label": "build mlx-lama-swift bridge and put odysseus-mlx-inpaint or mlx-lama-serve on PATH", "op": "dependency", "package": "mlx_lama_swift"}],
         ),
         (
             r"mlx-ddcolor-swift|odysseus-mlx-colorize|mlx-ddcolor-serve|DDColor MLX models require",
-            "DDColor MLX colorization requires an Odysseus-compatible mlx-ddcolor-swift bridge on this Apple Silicon server.",
+            "DDColor MLX colorization requires a Maven-compatible mlx-ddcolor-swift bridge on this Apple Silicon server.",
             [{"label": "build mlx-ddcolor-swift bridge and put odysseus-mlx-colorize or mlx-ddcolor-serve on PATH", "op": "dependency", "package": "mlx_ddcolor_swift"}],
         ),
         (
@@ -1389,7 +1389,7 @@ def _diagnose_serve_output(text: str) -> dict | None:
             "MLX-LM tried to quantize an already-quantized DeepSeek switch layer.",
             [
                 {"label": "relaunch from the cached local Hugging Face snapshot path on this Mac", "op": "manual"},
-                {"label": "Odysseus now rewrites MLX repo-id launches to a cached snapshot when one exists", "op": "manual"},
+                {"label": "Maven now rewrites MLX repo-id launches to a cached snapshot when one exists", "op": "manual"},
             ],
         ),
         # System build deps come BEFORE the generic llama.cpp catch-all so

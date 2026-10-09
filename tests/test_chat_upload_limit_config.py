@@ -62,3 +62,12 @@ def test_upload_handler_uses_configured_chat_limit(monkeypatch, tmp_path):
 
     assert exc.value.status_code == 400
     assert exc.value.detail == "File size exceeds 4 bytes limit"
+
+
+def test_new_name_is_read_and_named_in_errors(monkeypatch):
+    monkeypatch.delenv("ODYSSEUS_CHAT_UPLOAD_MAX_BYTES", raising=False)
+    monkeypatch.setenv("MAVEN_AI_CHAT_UPLOAD_MAX_BYTES", "7")
+    assert read_byte_limit_env("MAVEN_AI_CHAT_UPLOAD_MAX_BYTES", 10) == 7
+    monkeypatch.setenv("MAVEN_AI_CHAT_UPLOAD_MAX_BYTES", "0")
+    with pytest.raises(ValueError, match="MAVEN_AI_CHAT_UPLOAD_MAX_BYTES must be greater than 0"):
+        read_byte_limit_env("MAVEN_AI_CHAT_UPLOAD_MAX_BYTES", 10)

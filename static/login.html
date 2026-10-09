@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-visual">
-<title>Odysseus — Login</title>
+<title>Maven — Login</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%239cdef2'/%3E%3Cpolyline points='18,46 18,20 32,34 46,20 46,46' fill='none' stroke='%23282c34' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="manifest" href="static/manifest.json">
 <link rel="apple-touch-icon" href="static/icons/icon-192.png">
@@ -156,7 +156,7 @@
     font-family: 'Fira Code', monospace;
     font-size: 2rem; font-weight: 600;
     letter-spacing: 0.04em;
-    /* Same gradient as the main app's welcome-screen "Odysseus" title
+    /* Same gradient as the main app's welcome-screen "maven" title
        (static/style.css #welcome-screen .welcome-name) so the brand
        wordmark is consistent across login + first-launch screens. */
     background: linear-gradient(135deg, var(--brand-color, var(--red)), color-mix(in srgb, var(--brand-color, var(--red)) 60%, var(--fg)));
@@ -200,6 +200,7 @@
   button:disabled { opacity: 0.5; cursor: not-allowed; }
   .error { color: #e55; font-size: 0.85rem; margin-bottom: 0.75rem; display: none; }
   .toggle { text-align: center; margin-top: calc(1rem + 4px); font-size: 0.85rem; color: color-mix(in srgb, var(--fg) 50%, transparent); }
+  .monitoring-notice { margin-top: 1rem; font-size: 0.75rem; line-height: 1.4; text-align: center; color: color-mix(in srgb, var(--fg) 55%, transparent); }
   .toggle a { color: var(--red); cursor: pointer; text-decoration: none; }
   .toggle a:hover { text-decoration: underline; }
   .pw-wrapper { position: relative; margin-bottom: 1rem; }
@@ -273,7 +274,7 @@
 <body>
 <main class="card">
   <h1 class="logo">
-    <svg class="logo-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect x="7" y="7" width="50" height="50" rx="14" fill="none" stroke="currentColor" stroke-width="4.5"/><polyline points="20,44 20,22 32,34 44,22 44,44" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><circle class="logo-mark-dot" cx="32" cy="46" r="4"/></svg><span>Odysseus</span>
+    <svg class="logo-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect x="7" y="7" width="50" height="50" rx="14" fill="none" stroke="currentColor" stroke-width="4.5"/><polyline points="20,44 20,22 32,34 44,22 44,44" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><circle class="logo-mark-dot" cx="32" cy="46" r="4"/></svg><span>maven</span>
   </h1>
   <p class="setup-note" id="setupNote" style="display:none"></p>
 
@@ -309,6 +310,8 @@
 
     <button type="submit" id="submitBtn">Sign In</button>
   </form>
+
+  <p id="monitoringNotice" class="monitoring-notice" hidden></p>
 
   <div class="toggle" id="toggleArea" style="display:none">
     <span id="toggleText">Don't have an account? </span>
@@ -401,6 +404,11 @@
     const policyRes = await policyPromise;
     if (policyRes && policyRes.ok) {
       policy = await policyRes.json();
+      const noticeEl = document.getElementById('monitoringNotice');
+      if (noticeEl && policy.monitoring_notice) {
+        noticeEl.textContent = policy.monitoring_notice;
+        noticeEl.hidden = false;
+      }
     }
   } catch (e) {
     setMode('login');

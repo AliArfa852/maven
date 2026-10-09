@@ -274,6 +274,7 @@ class SessionManager:
             # model call. Persist only readable text plus attachment references
             # so chat_messages/FTS do not duplicate upload bytes.
             _content = persistable_message_content(message.content, message.metadata)
+            _owner = getattr(db_session, "owner", None)
             db_message = DbChatMessage(
                 id=msg_id,
                 session_id=session_id,
@@ -301,6 +302,12 @@ class SessionManager:
             message.metadata['_db_id'] = msg_id
 
             logger.debug(f"Persisted message to session {session_id}")
+
+            # Conversation flagging (plan v2 §6). After the commit, and it
+            # never raises, so a flagging problem cannot lose the message.
+            if message.role == "user":
+                from src.flagging import scan_and_record
+                scan_and_record(session_id, msg_id, _owner, _content)
 
         except Exception as e:
             logger.error(f"Error persisting message: {e}")

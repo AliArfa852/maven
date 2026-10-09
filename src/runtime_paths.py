@@ -1,5 +1,6 @@
 """Helpers for resolving runtime paths in source and frozen builds."""
 
+import ntpath
 import os
 import sys
 
@@ -28,3 +29,41 @@ def get_default_data_dir() -> str:
     if getattr(sys, "frozen", False):
         return os.path.join(os.path.expanduser("~"), ".odysseus", "data")
     return os.path.join(get_app_root(), "data")
+
+_ONEDRIVE_ENV_VARS = ("OneDrive", "OneDriveCommercial", "OneDriveConsumer")
+
+
+def is_inside_onedrive(path: str, environ=None) -> bool:
+    """True when ``path`` lies in a Windows OneDrive-synced folder.
+
+    OneDrive folders break the model downloader's cache (it stores files as
+    links OneDrive can't hold: WinError 1920) and are a poor place for live
+    databases. Matches the OneDrive roots Windows exports, plus any path
+    component that starts with "OneDrive" for setups that don't export them.
+    """
+    env = os.environ if environ is None else environ
+    norm = ntpath.normcase(ntpath.normpath(path))
+    for var in _ONEDRIVE_ENV_VARS:
+        root = env.get(var)
+        if root:
+            root = ntpath.normcase(ntpath.normpath(root)).rstrip("\\")
+            if norm == root or norm.startswith(root + "\\"):
+                return True
+    return any(part.startswith("onedrive") for part in norm.split("\\"))
+
+
+
+def onedrive_safe_hf_env(cache_dir: str, environ=None, os_name: str = None) -> dict:
+    """Downloader settings that make a HuggingFace cache work inside OneDrive.
+
+    The cache normally stores files as links, and the newer Xet transfer
+    writes into those blobs; inside a OneDrive folder on Windows that fails
+    with WinError 1920. Plain files over plain HTTP work, and the cache stays
+    in the project folder. Returns only the settings the caller hasn't set
+    itself (empty when not needed), so explicit choices are never overridden.
+    """
+    env = os.environ if environ is None else environ
+    if (os_name or os.name) != "nt" or not is_inside_onedrive(cache_dir, env):
+        return {}
+    wanted = {"HF_HUB_DISABLE_SYMLINKS": "1", "HF_HUB_DISABLE_XET": "1"}
+    return {k: v for k, v in wanted.items() if k not in env}

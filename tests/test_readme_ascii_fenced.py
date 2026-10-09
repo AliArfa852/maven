@@ -23,10 +23,12 @@ def _fenced_segments(text: str):
 
 
 def test_readme_opens_with_wordmark_title():
-    # The README must still open with a recognizable Odysseus title: now the
+    # The README must still open with a recognizable product title: the
     # centered wordmark image rather than an H1 / ASCII banner.
+    from src.brand import BRAND_NAME
+
     head = "\n".join(README.read_text(encoding="utf-8").splitlines()[:15])
-    assert 'alt="Odysseus"' in head, "README must open with the Odysseus wordmark image"
+    assert f'alt="{BRAND_NAME}"' in head, f"README must open with the {BRAND_NAME} wordmark image"
 
 
 def test_reintroduced_ascii_banner_stays_fenced():

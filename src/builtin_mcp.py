@@ -14,7 +14,9 @@ import subprocess
 import sys
 
 from core.platform_compat import IS_WINDOWS, which_tool
+from src.brand import BRAND_NAME
 from src.runtime_paths import get_app_root
+from src.brand import maven_env
 
 logger = logging.getLogger(__name__)
 
@@ -86,8 +88,8 @@ _BUILTIN_NPX_SERVERS = {
 }
 
 # Global flag to disable MCP if there are compatibility issues
-MCP_DISABLED = os.environ.get("ODYSSEUS_DISABLE_MCP", "").lower() in ("1", "true", "yes")
-BROWSER_MCP_REQUIRE_CACHE = os.environ.get("ODYSSEUS_BROWSER_MCP_REQUIRE_CACHE", "").lower() in ("1", "true", "yes")
+MCP_DISABLED = maven_env("MAVEN_AI_DISABLE_MCP", "").lower() in ("1", "true", "yes")
+BROWSER_MCP_REQUIRE_CACHE = maven_env("MAVEN_AI_BROWSER_MCP_REQUIRE_CACHE", "").lower() in ("1", "true", "yes")
 
 
 # Strong references to the fire-and-forget startup tasks scheduled below.
@@ -111,7 +113,7 @@ def _find_browser_executable() -> str:
     Chrome/Chromium in a conventional location. If nothing is found, return an
     empty string and let Playwright MCP use its own default browser/channel.
     """
-    configured = os.environ.get("ODYSSEUS_BROWSER_EXECUTABLE", "").strip()
+    configured = maven_env("MAVEN_AI_BROWSER_EXECUTABLE", "").strip()
     if configured:
         return configured
     for name in ("google-chrome", "chromium", "chromium-browser"):
@@ -136,10 +138,10 @@ def _browser_mcp_args(args: list[str]) -> list[str]:
         browser = _find_browser_executable()
         if browser:
             out.extend(["--executable-path", browser])
-    if os.environ.get("ODYSSEUS_BROWSER_ISOLATED", "1").lower() not in ("0", "false", "no"):
+    if maven_env("MAVEN_AI_BROWSER_ISOLATED", "1").lower() not in ("0", "false", "no"):
         if "--isolated" not in out and "--user-data-dir" not in out:
             out.append("--isolated")
-    if os.environ.get("ODYSSEUS_BROWSER_NO_SANDBOX", "1").lower() not in ("0", "false", "no"):
+    if maven_env("MAVEN_AI_BROWSER_NO_SANDBOX", "1").lower() not in ("0", "false", "no"):
         if "--no-sandbox" not in out and "--sandbox" not in out:
             out.append("--no-sandbox")
     return out
@@ -163,7 +165,7 @@ def builtin_python_env(base_dir: str) -> dict[str, str]:
 async def register_builtin_servers(mcp_manager):
     """Connect all built-in MCP servers to the manager."""
     if MCP_DISABLED:
-        logger.info("Built-in MCP servers disabled via ODYSSEUS_DISABLE_MCP")
+        logger.info("Built-in MCP servers disabled via MAVEN_AI_DISABLE_MCP")
         return
 
     base_dir = get_app_root()
@@ -206,7 +208,7 @@ async def register_builtin_servers(mcp_manager):
             # Browser automation is a shipped built-in, so the default path
             # lets `npx -y` install @playwright/mcp on first start. Locked-down
             # installs can opt back into the old no-network startup behavior
-            # with ODYSSEUS_BROWSER_MCP_REQUIRE_CACHE=1.
+            # with MAVEN_AI_BROWSER_MCP_REQUIRE_CACHE=1.
             args = _browser_mcp_args(cfg["args"]) if server_id == "builtin_browser" else list(cfg["args"])
             pkg_spec = _npx_package_from_args(args)
             if BROWSER_MCP_REQUIRE_CACHE and pkg_spec and not await _is_npx_package_cached(npx_path, pkg_spec):
@@ -215,9 +217,9 @@ async def register_builtin_servers(mcp_manager):
                     f"  Reason: npm package {pkg_spec!r} is not installed in the npx cache.\n"
                     f"  Impact: tools provided by this MCP server will be unavailable.\n"
                     f"  Fix:    {os.path.basename(npx_path)} -y {pkg_spec} --version\n"
-                    f"          (run once, then restart Odysseus)\n"
-                    f"  Notes:  ODYSSEUS_BROWSER_MCP_REQUIRE_CACHE=1 is set, "
-                    f"so Odysseus will not install browser automation on startup."
+                    f"          (run once, then restart " + BRAND_NAME + ")\n"
+                    f"  Notes:  MAVEN_AI_BROWSER_MCP_REQUIRE_CACHE=1 is set, "
+                    f"so {BRAND_NAME} will not install browser automation on startup."
                 )
                 continue
 
@@ -225,8 +227,7 @@ async def register_builtin_servers(mcp_manager):
             try:
                 env = None
                 if server_id == "builtin_browser":
-                    cache_home = os.environ.get(
-                        "ODYSSEUS_BROWSER_MCP_CACHE",
+                    cache_home = maven_env("MAVEN_AI_BROWSER_MCP_CACHE",
                         os.path.join(base_dir, "data", "local", "playwright-mcp-cache"),
                     )
                     os.makedirs(cache_home, exist_ok=True)

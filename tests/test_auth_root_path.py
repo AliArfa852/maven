@@ -281,3 +281,20 @@ def test_real_auth_middleware_uses_application_relative_path(tmp_path):
     }
     for name in ("mounted_api", "default_api"):
         assert payload[name] == {"status": 401, "location": None, "called": 0}
+
+
+def test_apis_the_login_page_calls_before_login_are_public():
+    # /api/auth/policy was missing, so the logged-out login page always got a
+    # 401 and fell back to hardcoded password rules (and no monitoring notice).
+    import ast
+
+    tree = ast.parse((ROOT / "app.py").read_text(encoding="utf-8"))
+    exempt = None
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "AUTH_EXEMPT_EXACT" for t in node.targets)):
+            exempt = {elt.value for elt in node.value.elts}
+    assert exempt is not None
+    for path in ("/api/version", "/api/auth/policy", "/api/auth/status",
+                 "/api/auth/login", "/api/auth/setup", "/api/auth/signup"):
+        assert path in exempt, path

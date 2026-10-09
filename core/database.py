@@ -7,6 +7,8 @@ from typing import Optional
 from urllib.parse import unquote, urlparse
 from sqlalchemy import DDL, event, create_engine, Column, String, Text, Boolean, DateTime, Integer, ForeignKey, JSON, Index, func, inspect, text
 from sqlalchemy.engine import Engine, make_url
+
+from src.db_url import with_installed_postgres_driver
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy.orm import relationship, sessionmaker, backref
@@ -69,8 +71,36 @@ def _normalize_sqlite_url(url: str) -> str:
     )
 
 
+def _table_info(conn, table: str) -> list:
+    """Column rows shaped like SQLite's ``PRAGMA table_info``:
+    ``(cid, name, type, notnull, dflt_value, pk)``, on any database.
+
+    The startup migrations were written against that pragma; on PostgreSQL it
+    is a syntax error, so every migration logged a failure. Other dialects go
+    through SQLAlchemy's inspector instead. Missing table -> ``[]``.
+    """
+    if conn.dialect.name == "sqlite":
+        return list(conn.execute(text(f"PRAGMA table_info({table})")))
+    return _inspected_table_info(conn, table)
+
+
+def _inspected_table_info(conn, table: str) -> list:
+    """The non-SQLite half of _table_info, via SQLAlchemy's inspector."""
+    insp = inspect(conn)
+    if not insp.has_table(table):
+        return []
+    pk = set((insp.get_pk_constraint(table) or {}).get("constrained_columns") or [])
+    return [
+        (i, c["name"], str(c["type"]), 0 if c.get("nullable", True) else 1,
+         c.get("default"), 1 if c["name"] in pk else 0)
+        for i, c in enumerate(insp.get_columns(table))
+    ]
+
+
 # Get database URL from environment, default to SQLite in DATA_DIR
-DATABASE_URL = _normalize_sqlite_url(os.getenv("DATABASE_URL", _default_database_url()))
+DATABASE_URL = with_installed_postgres_driver(
+    _normalize_sqlite_url(os.getenv("DATABASE_URL", _default_database_url()))
+)
 
 # Create engine
 engine = create_engine(
@@ -1526,7 +1556,7 @@ def _migrate_backfill_document_owner_from_session():
     admin assignment. Idempotent — only touches NULL-owner rows."""
     try:
         with engine.connect() as conn:
-            cols = [r[1] for r in conn.execute(text("PRAGMA table_info(documents)"))]
+            cols = [r[1] for r in _table_info(conn, "documents")]
             if "owner" not in cols:
                 return
             res = conn.execute(text(
@@ -1548,7 +1578,7 @@ def _migrate_add_tidy_verdict():
     """Add tidy_verdict column to documents table if missing."""
     try:
         with engine.connect() as conn:
-            cols = [r[1] for r in conn.execute(text("PRAGMA table_info(documents)"))]
+            cols = [r[1] for r in _table_info(conn, "documents")]
             if "tidy_verdict" not in cols:
                 conn.execute(text("ALTER TABLE documents ADD COLUMN tidy_verdict VARCHAR"))
                 conn.commit()
@@ -1567,7 +1597,7 @@ def _migrate_add_doc_source_email_cols():
     }
     try:
         with engine.connect() as conn:
-            existing = {r[1] for r in conn.execute(text("PRAGMA table_info(documents)"))}
+            existing = {r[1] for r in _table_info(conn, "documents")}
             for col, spec in cols_to_add.items():
                 if col not in existing:
                     conn.execute(text(f"ALTER TABLE documents ADD COLUMN {col} {spec}"))
@@ -1593,7 +1623,7 @@ def _migrate_add_task_automation_columns():
     }
     try:
         with engine.connect() as conn:
-            cols_info = list(conn.execute(text("PRAGMA table_info(scheduled_tasks)")))
+            cols_info = list(_table_info(conn, "scheduled_tasks"))
             col_names = [r[1] for r in cols_info]
             for col_name, col_def in new_cols.items():
                 if col_name not in col_names:
@@ -1658,7 +1688,7 @@ def _migrate_add_email_oauth_columns():
     """Add Google OAuth and display_name columns to email_accounts if missing."""
     try:
         with engine.connect() as conn:
-            cols = [r[1] for r in conn.execute(text("PRAGMA table_info(email_accounts)"))]
+            cols = [r[1] for r in _table_info(conn, "email_accounts")]
             for col, typedef in [
                 ("oauth_provider",      "TEXT"),
                 ("oauth_access_token",  "TEXT"),
@@ -1677,7 +1707,7 @@ def _migrate_add_oauth_config():
     """Add oauth_config column to mcp_servers table if missing."""
     try:
         with engine.connect() as conn:
-            cols = [r[1] for r in conn.execute(text("PRAGMA table_info(mcp_servers)"))]
+            cols = [r[1] for r in _table_info(conn, "mcp_servers")]
             if "oauth_config" not in cols:
                 conn.execute(text("ALTER TABLE mcp_servers ADD COLUMN oauth_config TEXT"))
                 conn.commit()
@@ -1689,7 +1719,7 @@ def _migrate_add_disabled_tools():
     """Add disabled_tools column to mcp_servers table if missing."""
     try:
         with engine.connect() as conn:
-            cols = [r[1] for r in conn.execute(text("PRAGMA table_info(mcp_servers)"))]
+            cols = [r[1] for r in _table_info(conn, "mcp_servers")]
             if "disabled_tools" not in cols:
                 conn.execute(text("ALTER TABLE mcp_servers ADD COLUMN disabled_tools TEXT"))
                 conn.commit()
@@ -1706,7 +1736,7 @@ def _migrate_add_mcp_oauth_tokens_column():
     TEXT. This matches the existing encrypted columns (see _migrate_encrypt_*)."""
     try:
         with engine.connect() as conn:
-            cols = [r[1] for r in conn.execute(text("PRAGMA table_info(mcp_servers)"))]
+            cols = [r[1] for r in _table_info(conn, "mcp_servers")]
             if "oauth_tokens" not in cols:
                 conn.execute(text("ALTER TABLE mcp_servers ADD COLUMN oauth_tokens TEXT"))
                 conn.commit()
@@ -1723,7 +1753,7 @@ def _migrate_add_task_v2_columns():
     }
     try:
         with engine.connect() as conn:
-            cols = [r[1] for r in conn.execute(text("PRAGMA table_info(scheduled_tasks)"))]
+            cols = [r[1] for r in _table_info(conn, "scheduled_tasks")]
             for col_name, col_def in new_cols.items():
                 if col_name not in cols:
                     conn.execute(text(f"ALTER TABLE scheduled_tasks ADD COLUMN {col_name} {col_def}"))
@@ -1759,7 +1789,7 @@ def _migrate_add_notifications_enabled():
     """Per-task notification on/off toggle (default ON)."""
     try:
         with engine.connect() as conn:
-            cols = [r[1] for r in conn.execute(text("PRAGMA table_info(scheduled_tasks)"))]
+            cols = [r[1] for r in _table_info(conn, "scheduled_tasks")]
             if "notifications_enabled" not in cols:
                 conn.execute(text("ALTER TABLE scheduled_tasks ADD COLUMN notifications_enabled BOOLEAN DEFAULT 1"))
                 conn.commit()
@@ -1772,12 +1802,12 @@ def _migrate_add_crew_member_id():
     """Add crew_member_id column to sessions and scheduled_tasks tables if missing."""
     try:
         with engine.connect() as conn:
-            cols = [r[1] for r in conn.execute(text("PRAGMA table_info(sessions)"))]
+            cols = [r[1] for r in _table_info(conn, "sessions")]
             if "crew_member_id" not in cols:
                 conn.execute(text("ALTER TABLE sessions ADD COLUMN crew_member_id TEXT"))
                 conn.commit()
                 logging.getLogger(__name__).info("Added crew_member_id column to sessions")
-            cols2 = [r[1] for r in conn.execute(text("PRAGMA table_info(scheduled_tasks)"))]
+            cols2 = [r[1] for r in _table_info(conn, "scheduled_tasks")]
             if "crew_member_id" not in cols2:
                 conn.execute(text("ALTER TABLE scheduled_tasks ADD COLUMN crew_member_id TEXT"))
                 conn.commit()
@@ -1789,7 +1819,7 @@ def _migrate_add_assistant_columns():
     """Add is_default_assistant + timezone columns to crew_members for the personal-assistant feature."""
     try:
         with engine.connect() as conn:
-            cols = [r[1] for r in conn.execute(text("PRAGMA table_info(crew_members)"))]
+            cols = [r[1] for r in _table_info(conn, "crew_members")]
             if "is_default_assistant" not in cols:
                 conn.execute(text("ALTER TABLE crew_members ADD COLUMN is_default_assistant BOOLEAN DEFAULT 0"))
                 conn.commit()
@@ -2058,6 +2088,51 @@ def _migrate_seed_email_account():
 # Any future migrations or schema changes that temporarily violate foreign-key
 # constraints will fail. To perform such operations, foreign_keys must be
 # temporarily disabled around the migration workflow.
+class ConversationFlag(Base):
+    """A chat message that matched a flagging rule (plan v2 §6, src/flagging.py).
+
+    Stores a short, masked excerpt around the match, never the whole message,
+    so reviewers see only what they need. Decisions are made by Compliance
+    Officers and recorded with who made them and when.
+    """
+    __tablename__ = "conversation_flags"
+
+    id          = Column(String, primary_key=True)
+    session_id  = Column(String, nullable=False, index=True)
+    message_id  = Column(String, nullable=True)
+    owner       = Column(String, nullable=True, index=True)   # who sent the message
+    category    = Column(String, nullable=False)              # see src.flagging.CATEGORIES
+    rule        = Column(String, nullable=False)
+    severity    = Column(String, nullable=False, default="medium")  # low / medium / high
+    excerpt     = Column(Text, nullable=False, default="")
+    status      = Column(String, nullable=False, default="open", index=True)  # open / dismissed / warned / escalated
+    created_at  = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    reviewed_by = Column(String, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    review_note = Column(Text, nullable=True)
+
+
+class AuditEvent(Base):
+    """Append-only, hash-chained record of security-relevant actions (src/audit.py).
+
+    Each row's ``hash`` covers its own fields and the previous row's hash, so
+    editing or deleting a past row breaks the chain from that point on. No
+    message content or passwords are stored: who, what, when, from where.
+    """
+    __tablename__ = "audit_events"
+
+    id        = Column(Integer, primary_key=True, autoincrement=True)
+    at        = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    actor     = Column(String, nullable=True, index=True)   # username, or None before login
+    action    = Column(String, nullable=False, index=True)  # e.g. auth.login.failed, http.PUT
+    target    = Column(String, nullable=True)               # e.g. a path or username
+    outcome   = Column(String, nullable=False, default="ok")  # ok / denied / failed / error
+    ip        = Column(String, nullable=True)
+    detail    = Column(Text, nullable=True)                 # small JSON object
+    prev_hash = Column(String, nullable=False, default="")
+    hash      = Column(String, nullable=False)
+
+
 def init_db():
     """
     Initialize the database by creating all tables.
@@ -2159,7 +2234,7 @@ def _migrate_backfill_task_folders():
     """
     try:
         with engine.connect() as conn:
-            cols = [r[1] for r in conn.execute(text("PRAGMA table_info(sessions)"))]
+            cols = [r[1] for r in _table_info(conn, "sessions")]
             if "folder" not in cols:
                 return
             res = conn.execute(text(
@@ -2175,9 +2250,38 @@ def _migrate_backfill_task_folders():
         logging.getLogger(__name__).warning(f"task folder backfill: {e}")
 
 
+# PostgreSQL full-text search over chat messages. The index and every query
+# must use this exact expression, or PostgreSQL will not use the index.
+# 'simple' = no stemming, so it works for any language. Inline media is left
+# out and long messages are cut, because to_tsvector fails on values over 1 MB
+# and an index that fails would block saving the message.
+PG_CHAT_SEARCH_VECTOR = (
+    "to_tsvector('simple'::regconfig, left(CASE "
+    "WHEN strpos(COALESCE(content, ''), ';base64,') > 0 "
+    "OR strpos(COALESCE(content, ''), 'data:image/') > 0 "
+    "OR strpos(COALESCE(content, ''), 'data:audio/') > 0 "
+    "THEN '' ELSE COALESCE(content, '') END, 100000))"
+)
+
+
+def _migrate_chat_messages_pg_search():
+    """GIN index for chat history search on PostgreSQL (SQLite uses FTS5)."""
+    if not DATABASE_URL.startswith("postgresql"):
+        return
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                f"CREATE INDEX IF NOT EXISTS ix_chat_messages_search ON chat_messages "
+                f"USING gin ({PG_CHAT_SEARCH_VECTOR})"
+            ))
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"chat_messages search index skipped: {e}")
+
+
 def _migrate_chat_messages_fts():
     """Create and backfill the session transcript FTS index for SQLite."""
     if not DATABASE_URL.startswith("sqlite"):
+        _migrate_chat_messages_pg_search()
         return
 
     db_path = DATABASE_URL.replace("sqlite:///", "")

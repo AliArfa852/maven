@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Odysseus — first-time setup script.
+"""Maven — first-time setup script.
 
 Creates data directories, initializes the database, and sets up an
 initial admin user. Safe to re-run (skips what already exists).
@@ -19,6 +19,7 @@ from src.constants import (
     RAG_DIR, MEMORY_VECTORS_DIR, AGENT_WORKSPACE_DIR, PASSWORD_MIN_LENGTH,
 )
 from core.auth import RESERVED_USERNAMES
+from src.brand import BRAND_NAME, maven_env
 
 DIRS = [
     DATA_DIR,
@@ -99,18 +100,18 @@ def create_default_admin():
         import json
 
         # Priority: env vars > interactive prompt > random password
-        username = os.getenv("ODYSSEUS_ADMIN_USER", "").strip().lower()
-        password = os.getenv("ODYSSEUS_ADMIN_PASSWORD", "").strip()
+        username = maven_env("MAVEN_AI_ADMIN_USER", "").strip().lower()
+        password = maven_env("MAVEN_AI_ADMIN_PASSWORD", "").strip()
 
         if username and password:
             # Both provided via env — validate before using
             if username in RESERVED_USERNAMES:
-                print(f"  [error] ODYSSEUS_ADMIN_USER '{username}' is a reserved username")
+                print(f"  [error] MAVEN_AI_ADMIN_USER '{username}' is a reserved username")
                 return "failed"
             if len(password) < PASSWORD_MIN_LENGTH:
-                print(f"  [error] ODYSSEUS_ADMIN_PASSWORD must be at least {PASSWORD_MIN_LENGTH} characters")
+                print(f"  [error] MAVEN_AI_ADMIN_PASSWORD must be at least {PASSWORD_MIN_LENGTH} characters")
                 return "failed"
-        elif sys.stdin.isatty() and not os.getenv("ODYSSEUS_SKIP_ADMIN_PROMPT"):
+        elif sys.stdin.isatty() and not maven_env("MAVEN_AI_SKIP_ADMIN_PROMPT"):
             # Interactive terminal — ask the user
             username, password = _prompt_admin_credentials()
         else:
@@ -131,13 +132,13 @@ def create_default_admin():
         with open(auth_path, "w", encoding="utf-8") as f:
             json.dump(auth_data, f, indent=2)
 
-        if sys.stdin.isatty() and not os.getenv("ODYSSEUS_ADMIN_PASSWORD"):
+        if sys.stdin.isatty() and not maven_env("MAVEN_AI_ADMIN_PASSWORD"):
             print(f"  [ok] Admin account created ({username})")
         else:
             print(f"  [ok] Initial admin user created ({username})")
-            if not os.getenv("ODYSSEUS_ADMIN_PASSWORD"):
+            if not maven_env("MAVEN_AI_ADMIN_PASSWORD"):
                 print(f"        Temporary password: {password}")
-                print(f"        ** Change it after first login. Set ODYSSEUS_ADMIN_PASSWORD to choose your own. **")
+                print(f"        ** Change it after first login. Set MAVEN_AI_ADMIN_PASSWORD to choose your own. **")
         return "created"
     except ImportError as e:
         if "incompatible architecture" in str(e).lower():
@@ -238,9 +239,9 @@ def check_arch():
 
 
 def main():
-    print("\n=== Odysseus Setup ===\n")
+    print(f"\n=== {BRAND_NAME} Setup ===\n")
 
-    # Load .env so pre-seeded ODYSSEUS_ADMIN_USER / ODYSSEUS_ADMIN_PASSWORD (and
+    # Load .env so pre-seeded MAVEN_AI_ADMIN_USER / MAVEN_AI_ADMIN_PASSWORD (and
     # other deployment vars) are honored on native installs, not just when they
     # are exported in the shell. Mirrors app.py: encoding="utf-8-sig" tolerates a
     # UTF-8 BOM in a Notepad-saved .env. load_dotenv does not override already
@@ -248,6 +249,11 @@ def main():
     # is a hard dependency (requirements.txt) and is verified by check_deps below.
     from dotenv import load_dotenv
     load_dotenv(os.path.join(BASE_DIR, ".env"), encoding="utf-8-sig")
+    # .env may set MAVEN_AI_ADMIN_USER / MAVEN_AI_ADMIN_PASSWORD; re-run the
+    # alias shim so they win over (and fill in) the legacy ODYSSEUS_* names
+    # read below. The import-time call in src.constants ran before .env loaded.
+    from src.brand import apply_env_aliases
+    apply_env_aliases()
 
     # Fail fast with a clear message if the CPU architecture is wrong (Apple
     # Silicon under an x86/Rosetta Python) before importing anything native.
@@ -282,7 +288,7 @@ def main():
     print("\n=== Setup complete ===")
     # start-macos.sh launches the server itself (on its own port) right after
     # this, so suppress the manual hint there to avoid a contradictory URL.
-    if not os.getenv("ODYSSEUS_SKIP_RUN_HINT"):
+    if not maven_env("MAVEN_AI_SKIP_RUN_HINT"):
         print(f"\nStart the server with:")
         print(f"  python -m uvicorn app:app --host 127.0.0.1 --port 7000")
         print(f"\nThen open http://localhost:7000")

@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""maven-users — check accounts and recover access from the server.
+
+For when nobody can log in: a forgotten admin password, or an auth.json
+that was edited by hand or damaged. Runs on the server against the same
+data directory as the app; there is no web route for any of this.
+
+    maven-users list                          # usernames, roles, clearance
+    maven-users check                         # accounts that cannot log in
+    maven-users reset-password admin          # prompts for the new password twice
+    maven-users reset-password admin --generate   # prints a random one once
+    maven-users make-admin alice              # when no working admin is left
+
+A reset signs that user out of every browser. Restart is not needed.
+"""
+
+from __future__ import annotations
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "_lib"))
+from cli import quiet_logs, emit, fail, common_parser, run
+quiet_logs()
+
+import getpass
+import secrets
+
+try:
+    from core.auth import AuthManager
+    from src.constants import AUTH_FILE, PASSWORD_MIN_LENGTH
+    quiet_logs()
+except ModuleNotFoundError as e:
+    fail(f"{e}\nhint: run from the repo root with the venv active.", code=2)
+
+
+def _manager() -> AuthManager:
+    if not os.path.exists(AUTH_FILE):
+        fail(f"no accounts yet ({AUTH_FILE} does not exist). Run setup.py to create the admin.")
+    return AuthManager(AUTH_FILE)
+
+
+def cmd_list(args):
+    mgr = _manager()
+    emit({"auth_file": AUTH_FILE, "users": [
+        {"username": u, **{k: v for k, v in mgr.access_summary(u).items()
+                           if k in ("roles", "clearance")}}
+        for u in mgr.users
+    ]}, args)
+    return 0
+
+
+def cmd_check(args):
+    mgr = _manager()
+    problems = mgr.account_problems()
+    admins = [u for u in mgr.users if mgr.is_admin(u)]
+    emit({"auth_file": AUTH_FILE, "users": len(mgr.users), "admins": admins,
+          "problems": problems}, args)
+    if not admins:
+        sys.stderr.write("warning: no admin account. Grant one with: "
+                         "maven-users make-admin <username>\n")
+    if problems:
+        sys.exit(1)  # run() ignores return values
+    return 0
+
+
+def cmd_reset_password(args):
+    mgr = _manager()
+    username = args.username.strip().lower()
+    if username not in mgr.users:
+        fail(f"no user '{username}'. Existing: {', '.join(sorted(mgr.users)) or '(none)'}")
+    if args.generate:
+        password = secrets.token_urlsafe(18)
+    else:
+        password = getpass.getpass(f"New password for {username}: ")
+        if password != getpass.getpass("Repeat it: "):
+            fail("the two passwords differ")
+    if len(password) < PASSWORD_MIN_LENGTH:
+        fail(f"password must be at least {PASSWORD_MIN_LENGTH} characters")
+    if not mgr.reset_password(username, password):
+        fail("reset failed; see the log above")
+    out = {"ok": True, "username": username}
+    if args.generate:
+        out["password"] = password
+        sys.stderr.write("Shown once. Change it after logging in.\n")
+    emit(out, args)
+    return 0
+
+
+def cmd_make_admin(args):
+    mgr = _manager()
+    username = args.username.strip().lower()
+    if not mgr.grant_admin_local(username):
+        fail(f"no user '{username}'. Existing: {', '.join(sorted(mgr.users)) or '(none)'}")
+    emit({"ok": True, "username": username, **mgr.access_summary(username)}, args)
+    return 0
+
+
+def build_parser():
+    p = common_parser("maven-users", "Check accounts and reset passwords on the server.")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    pl = sub.add_parser("list", parents=[p._common_parents[0]], help="list users")
+    pl.set_defaults(func=cmd_list)
+    pc = sub.add_parser("check", parents=[p._common_parents[0]],
+                        help="find accounts that cannot log in")
+    pc.set_defaults(func=cmd_check)
+    pr = sub.add_parser("reset-password", parents=[p._common_parents[0]],
+                        help="set a new password for a user")
+    pr.add_argument("username")
+    pr.add_argument("--generate", action="store_true",
+                    help="generate a random password and print it once")
+    pr.set_defaults(func=cmd_reset_password)
+    pm = sub.add_parser("make-admin", parents=[p._common_parents[0]],
+                        help="give a user the Admin role")
+    pm.add_argument("username")
+    pm.set_defaults(func=cmd_make_admin)
+    return p
+
+
+if __name__ == "__main__":
+    sys.exit(run(build_parser()))

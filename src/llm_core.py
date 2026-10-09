@@ -13,8 +13,10 @@ import math
 from contextlib import asynccontextmanager
 from fastapi import HTTPException
 from typing import Optional, Dict, List, Tuple
+from src.brand import BRAND_NAME, SOURCE_URL
 from src.model_context import get_context_length, DEFAULT_CONTEXT, is_local_endpoint
 from urllib.parse import urlparse
+from src.brand import maven_env
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +73,7 @@ def _normalize_http_status(value) -> Optional[int]:
 
 
 def _local_model_gate_enabled() -> bool:
-    return os.getenv("ODYSSEUS_LOCAL_MODEL_GATE", "true").lower() not in {"0", "false", "no", "off"}
+    return maven_env("MAVEN_AI_LOCAL_MODEL_GATE", "true").lower() not in {"0", "false", "no", "off"}
 
 
 def _gate_workload(workload: Optional[str]) -> str:
@@ -1099,8 +1101,8 @@ def _provider_headers(provider: str, headers: Optional[Dict] = None) -> Dict[str
     if isinstance(headers, dict):
         h.update(headers)
     if provider == "openrouter":
-        h.setdefault("HTTP-Referer", "https://github.com/odysseus-dev/odysseus")
-        h.setdefault("X-OpenRouter-Title", "Odysseus")
+        h.setdefault("HTTP-Referer", SOURCE_URL)
+        h.setdefault("X-OpenRouter-Title", BRAND_NAME)
     if provider == "copilot":
         # Ensure the Copilot-required headers are present even when the caller
         # didn't pass pre-built headers (e.g. model listing). build_headers()
@@ -1432,8 +1434,8 @@ def _anthropic_rejects_temperature(model: str) -> bool:
 # Reasoning effort level sent to Mistral thinking-capable models. Mistral's
 # API accepts "high", "medium", "low", "none" — see
 # https://docs.mistral.ai/capabilities/reasoning/. Override via env var
-# ODYSSEUS_MISTRAL_REASONING_EFFORT (e.g. set to "medium" for cheaper chat).
-_MISTRAL_REASONING_EFFORT = os.getenv("ODYSSEUS_MISTRAL_REASONING_EFFORT", "high")
+# MAVEN_AI_MISTRAL_REASONING_EFFORT (e.g. set to "medium" for cheaper chat).
+_MISTRAL_REASONING_EFFORT = maven_env("MAVEN_AI_MISTRAL_REASONING_EFFORT", "high")
 
 # Models that support structured thinking — may output </think> without opening tag
 _THINKING_MODEL_PATTERNS = (
@@ -2647,7 +2649,7 @@ async def _stream_llm_inner(url: str, model: str, messages: List[Dict], temperat
             payload["tool_choice"] = "none"
         # Mistral thinking-capable models — send reasoning_effort so Mistral
         # activates thinking mode and returns structured reasoning_content.
-        # Effort level is configurable via ODYSSEUS_MISTRAL_REASONING_EFFORT
+        # Effort level is configurable via MAVEN_AI_MISTRAL_REASONING_EFFORT
         # (high / medium / low / none); default "high".
         if provider == "mistral" and _supports_thinking(model):
             payload["reasoning_effort"] = _MISTRAL_REASONING_EFFORT

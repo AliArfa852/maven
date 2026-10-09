@@ -56,3 +56,10 @@ httpx2
 # create_engine() and raises ModuleNotFoundError if missing. -binary avoids
 # needing libpq-dev/pg_config on the host/image to compile it.
 psycopg2-binary
+# Office file creation (src/file_builder.py): xlsx, docx, pptx, pdf. All MIT/BSD.
+openpyxl
+python-docx
+python-pptx
+reportlab
+# Chart images in Word files (src/file_charts.py); also a reportlab dependency. MIT-CMU.
+Pillow

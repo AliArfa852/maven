@@ -10,6 +10,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
+from src.brand import BRAND_NAME
 from src.model_context import get_context_length, estimate_tokens
 from src.llm_core import llm_call_async
 from src.endpoint_resolver import resolve_endpoint
@@ -148,7 +149,7 @@ def _truncate_text_to_token_budget(text: str, token_budget: int) -> str:
 
     notice = (
         "\n\n[Notice: the pasted message was too large for this model's context "
-        "window, so Odysseus kept the beginning and end.]"
+        "window, so " + BRAND_NAME + " kept the beginning and end.]"
     )
     keep_chars = max(200, max_chars - len(notice))
     head_len = max(100, int(keep_chars * 0.7))

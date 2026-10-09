@@ -1,121 +1,293 @@
-# Maven plan: corporate, local-first AI workspace (fork of Odysseus)
+# Maven plan v2: a corporate, local-first AI workspace (fork of Odysseus)
 
-**Status:** draft, 2026-10-04. Decisions marked **[DECIDE]** are open in DECISIONS-PENDING.md. The defaults shown are recommendations until the human answers.
+**Status:** v2 draft, 2026-10-07. Replaces v1 (2026-10-04). Decisions marked **[DECIDE]** are mirrored into DECISIONS-PENDING.md (D-2-*). The defaults shown are recommendations until the human answers.
 
 **Who reads this:** the human, and the orchestrator, which reads this file every tick and queues tickets only from the **active phase**.
 
-**Pitch:** "Your AI, on your servers." Chats, documents, skills and the knowledge graph never leave hardware you own. It is open source, so it is auditable. It works offline. We never claim cloud vendors are insecure. We claim control, residency and auditability, and the product must prove each of those (Phase 1 gates).
+**Product:** Maven is software a company installs on its own servers. It gives every employee AI help with chat, documents, spreadsheets, analysis and reports, and it knows the company's knowledge. Each person sees only what their role and clearance allow. Nothing leaves the company network, and every use can be audited.
 
-## Requirements (from the human, 2026-10-04)
+**Pitch:** "Your AI, on your servers." We never claim cloud vendors are insecure. We claim **control, residency, least privilege and auditability**, and the product must prove each of those with tests (see "Proof points" below).
 
-| # | Requirement |
-| --- | --- |
-| R1 | Rebrand to **Maven**, with a corporate-friendly look. |
-| R2 | Sheets integration. |
-| R3 | A local knowledge base: knowledge graph + GraphRAG, with LangGraph orchestration and Ollama models. |
-| R4 | Structured and unstructured document processing: sheets, PDF, docs. |
-| R5 | Team personas, with automatic persona recommendation. |
-| R6 | A simple GUI for non-technical corporate staff. |
-| R7 | Chat context, skills and knowledge files stored and processed locally, through an admin-locked local-only mode. |
-| R8 | A "safe to deploy locally" pitch, which requires corporate hardening. |
-| R9 | Visualizations from chat data. The numbers come from computed data, never from the model's memory. Every chart has "show data" and a source. |
-| R10 | The knowledge graph as on-demand context for chat, charts and graph views. It is team-scoped and cited. |
-| R11 | Diagrams from basic to complex, recommended by the chat from the data shape and the user's intent. They are ranked Simple / Detailed / Advanced, shown as preview cards, validated and auto-repaired, and learned per team. |
+---
 
-## Legal guardrails (apply to every phase)
+## 1. Requirements
 
-- **Maven stays AGPL-3.0-or-later.** The project was relicensed on 2026-06-09 (`23f0d64e`). It has 351 contributors and no CLA.
-- **Keep:**
-  - `LICENSE`
-  - the "Odysseus Contributors" notices
-  - `ACKNOWLEDGMENTS.md`
-  - `licenses/*` (the MIT and Apache notices; Apache also needs a statement of changes)
-- **Add:** a modified-version notice under AGPL §5a, and a "Source" link in the UI under §13.
-- **Remove:** the Odysseus name and logos from the product (no trademark grant). Saying "based on Odysseus" is fine.
-- **New dependencies:** each needs a license line added to ACKNOWLEDGMENTS, verified from the repo, not from memory.
-- **Counsel:** company counsel signs off on the AGPL position before any customer deployment. That is human-owned.
+v1 requirements R1–R11 still stand. R12–R20 were added on 2026-10-07.
 
-## Phase 0: make the loop able to land (human + security-core)
-
-| Step | Owner |
-| --- | --- |
-| Commit `scripts/fleet_gate.py`, `fleet_ownership.py`, `loop_snapshot.py` | human |
-| Promote `gate-baseline.proposed.txt` to `gate-baseline.txt` (186 failures, 5,956 tests) | human |
-| Shrink the baseline by fixing the Windows-only harness failures: about 60 Node ESM `C:\` URL errors, about 20 cp1252 encoding errors, `socket.AF_UNIX` | security-core (tests/helpers, conftest) |
-
-The confinement and `write_file` failures in the baseline mask exactly the areas the pitch depends on, so they come first.
-
-**Exit:** the baseline has ≤ 40 entries, and every remaining entry has a one-line reason.
-
-## Phase 1: foundation (R1, R7, R8)
-
-These are cheap and unblock the pitch. **Decided (D-0-1): this phase goes first.**
-
-### 1a. Local-only mode, admin-locked, on by default
-- Ollama is the only chat provider and the only embedding provider.
-- Cloud providers are hidden and blocked server-side.
-- Embeddings never call an external HTTP API.
-- Pyodide and PDFObject are vendored into `static/lib/`. No CDN scripts, and the CSP drops `cdn.jsdelivr.net`.
-- Web search and deep research are off by default.
-- **done-when:** a test asserts that no outbound request goes to a non-allowlisted host in local-only mode (owner: security-core). A CSP test asserts no third-party script origin (owner: chat-core).
-
-### 1b. Hardening
-
-| Item | Owner | Notes |
+| # | Requirement | Phase |
 | --- | --- | --- |
-| Fix the SSRF via `/api/v1/chat` `base_url` (THREAT_MODEL gap 2) | security-core | regression test first |
-| Shell, Python and file tools stay **admin-only, unsandboxed (D-0-2)**. Add tests that non-admins and team roles can never reach them; the audit log records every call; the docs say "unsandboxed". | security-core | |
-| Audit log: who asked what, and which documents and tools were used | security-core | append-only, local |
-| Per-team roles: a `team` on users and on stored items, with owner-scope checks extended to team scope | security-core | It is a design, so it needs a sprint |
-| SSO (OIDC: Entra ID, Okta) | — | Phase 1 design, Phase 2 build |
+| R1 | Rebrand to **Maven**, with a corporate look | 1 |
+| R2 | Sheets: open, edit, query, and write results back | 3 |
+| R3 | A local knowledge base: knowledge graph + GraphRAG on local (Ollama) models | 4 |
+| R4 | Structured and unstructured document processing | 3 |
+| R5 | Team personas, with automatic persona recommendation | 6 |
+| R6 | A simple GUI for non-technical staff | 6 |
+| R7 | Admin-locked local-only mode | 1 |
+| R8 | Corporate hardening, so it is "safe to deploy locally" | 1, 2 |
+| R9 | Visualizations from computed data, never from the model's memory; "show data" and a source on every chart | 5 |
+| R10 | The knowledge graph as on-demand, cited context that respects permissions | 4 |
+| R11 | Diagrams from simple to advanced, recommended from the data shape and the user's intent | 5 |
+| **R12** | **File tools:** read and extract from PDF, DOCX, XLSX/CSV and PPTX (including tables and scanned pages), and **create** XLSX, DOCX, PDF, PPTX and CSV | 3 |
+| **R13** | **Two-tier knowledge:** (a) context limited to a conversation and the resources given to it; (b) a company-wide knowledge graph built from the knowledge base and from approved insights out of chats | 3 (a), 4 (b) |
+| **R14** | **Shared sessions:** several employees work in one conversation with shared resources | 3 |
+| **R15** | **Data analysis:** finance and general analysis of structured and unstructured data, in a sandbox | 5 |
+| **R16** | **Report builder:** reports with charts, tables and diagrams, exported to PDF, DOCX or PPTX | 5 |
+| **R17** | **Role-based access:** Basic, Advanced, Manager, General Manager and Admin, plus the improvements in §3 | 2 |
+| **R18** | **No data leakage:** email, contracts, financials and other sensitive data never leave through the model, tools, exports or other users | 2 onward |
+| **R19** | **Conversation flagging:** inappropriate use is flagged for review | 2 (rules), 6 (classifier) |
+| **R20** | **Sellable to corporations:** installer, SSO, updates, backups, compliance documents, support | 7 |
+| **R21** | **Admin Console** with view-only access for Managers, duty-only access for Compliance Officers, full access for Admins; several roles per user; a default admin account | 2 (started) |
 
-### 1c. Rebrand to Maven (sprint, led by chat-core)
+---
 
-- **Decided (D-0-3): depth is full.** That means "UI/docs plus env/CLI/image names with compatibility aliases": `ODYSSEUS_DATA_DIR` keeps working, and `MAVEN_DATA_DIR` wins when both are set.
-- **Size:** 2,649 occurrences across 397 files.
-- **Human-owned edits:** `assets/branding/*` (new logo), `website/`, `specs/`, and the license notices.
-- **Visual review** of the corporate theme ends as `needs-human`.
-- **done-when:** `git grep -i odysseus` returns only allowlisted lines (license notices, compatibility aliases, ACKNOWLEDGMENTS, the "based on" credit), checked by a test, and the §5a notice is present.
+## 2. Main changes from v1, and why
 
-### 1c-end. Batch-2 gate re-run (D-1c-0)
-Gate `fleet/batch-2-verify` (T-1-7, T-1-8) together with the rename sprint branch, which is based on it, in one full gate. Land on GREEN.
+1. **Access control and data classification now come before the knowledge graph** (the new Phase 2). Adding permissions afterwards to a RAG index or graph that already holds mixed-sensitivity data is the classic way these products leak. Every stored item gets an owner, a team and a label from the day it is created.
+2. **Chats do not flow into the company graph automatically.** Doing so would leak one employee's conversation to everyone. Chat knowledge reaches the graph only through a **promotion pipeline**: the system proposes, the author consents, and the knowledge owner approves (§4.3).
+3. **Permission checks happen before the model sees anything.** Retrieval filters by permission inside the store (security trimming). We never rely on a prompt telling the model "don't reveal X".
+4. **Sessions carry a sensitivity level ("taint tracking").** A session takes the highest label of anything it has read. That level then gates outbound tools, exports and sharing (§3.4). This one mechanism covers most leak paths.
+5. **Separation of duties.** An admin runs the system but does not automatically read everyone's content. Flag review belongs to a separate Compliance role. Using emergency "break-glass" access is itself audited.
+6. **Data analysis runs in a sandbox, not with the admin-only Python tool.** D-0-2 keeps shell and Python tools admin-only and unsandboxed. Analysis for every employee therefore needs its own locked runtime (§5.2).
+7. **PostgreSQL is the corporate database** (decided, D-2-1). SQLite stays for single-user installs. Postgres handles many concurrent users, and row-level security gives a second, database-level permission check. It can also hold vectors (pgvector) and possibly the graph (Apache AGE), so there is one store to back up.
 
-## Phase 2: documents in, knowledge out (R4, R2, R3)
+---
 
-| Item | Detail |
+## 3. Access model (R17, R18)
+
+### 3.1 Three independent dimensions
+
+The roles you listed mix three different questions. Keeping them separate is what makes the system configurable for real companies.
+
+| Dimension | Question it answers | Values |
+| --- | --- | --- |
+| **Role** (capabilities) | What can this person *do*? | Basic, Advanced, Manager, General Manager, Admin, plus **Compliance Officer** (new) |
+| **Clearance** (data level) | How sensitive can the data they *see* be? | Public < Internal < Confidential < Restricted |
+| **Scope** (organisation) | *Whose* data is it? | own, team, department, company; plus explicit grants (e.g. "Finance contracts folder") |
+
+A user can see an item only when **all three** allow it: role permits the feature, clearance ≥ the item's label, and scope covers the item's owner/team (or an explicit grant exists).
+
+### 3.2 Default roles (companies can edit them)
+
+| Capability | Basic | Advanced | Manager | General Manager | Compliance | Admin |
+| --- | --- | --- | --- | --- | --- | --- |
+| Chat, own files, team knowledge (read) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Read/extract files, create documents | ✓ | ✓ | ✓ | ✓ | – | ✓ |
+| Data analysis sandbox, sheets write-back, report builder | – | ✓ | ✓ | ✓ | – | ✓ |
+| Create shared sessions | – | ✓ | ✓ | ✓ | – | ✓ |
+| Larger models / longer context | – | ✓ | ✓ | ✓ | – | ✓ |
+| Curate team knowledge base, approve promotions | – | – | ✓ (team) | ✓ (dept/company) | – | – |
+| Team usage reports (aggregate, no content) | – | – | ✓ | ✓ | – | ✓ |
+| Review flagged conversations | – | – | – | – | ✓ | – |
+| Users, roles, models, settings, integrations | – | – | – | – | – | ✓ |
+| Shell / Python / file tools on the host (D-0-2) | – | – | – | – | – | ✓ (audited) |
+| Read other users' content | – | – | – | – | flagged excerpts only | break-glass only, audited and notified |
+
+**Default clearance (decided, D-2-2):** Basic = Internal, Advanced = Internal, Manager = Confidential, General Manager = Restricted, Compliance = Restricted (flag excerpts only), Admin = Internal (separation of duties). A new user gets the default for their roles unless an Admin sets an override.
+
+**Several roles per user (decided, D-2-8):** capabilities are the union of the user's roles, and clearance is the highest default among them unless overridden. Every user holds Basic.
+
+**Admin Console (decided, D-2-8):** one page for monitoring, decisions and changes.
+- **Admin:** full access; changes users, roles, clearance and settings.
+- **Manager / General Manager:** can open it and see everything on it, but **change nothing**.
+- **Compliance Officer:** can open it and see it, and can carry out **only compliance duties** (the flag review queue); nothing else.
+- **Basic / Advanced:** no access.
+- The server enforces every read and change; the page only hides what a user may not do.
+- **Default admin account:** the first-run setup creates an admin (`MAVEN_AI_ADMIN_USER` / `MAVEN_AI_ADMIN_PASSWORD`, or a generated password printed once). The last admin can never be removed.
+
+**Built (2026-10-07, branch `claude/bold-lovelace-pppvnh`):** `src/access.py` (roles, clearance, capabilities); roles and clearance stored per user in `core/auth.py`, with Admin still driven by `is_admin` so every existing admin gate is unchanged; `require_capability` in `core/middleware.py`; `GET /api/auth/users` and `GET /api/auth/roles` for console viewers; `PUT /api/auth/users/{u}/roles` and `/clearance` for Admins; the `/admin-console` page, linked from Settings → Account; `tests/test_access_roles.py`.
+
+**Built (2026-10-07): conversation flagging rules v1** (`src/flagging.py`, `routes/compliance_routes.py`, `conversation_flags` table). Every saved user message is checked after it is committed (never blocks chat): pasted secrets, instruction-override attempts, bulk export of sensitive data, requests for other people's data, card numbers, many email addresses, and an optional `MAVEN_AI_FLAG_KEYWORDS` watch list. Stores a masked excerpt only. Compliance Officers list and decide (dismiss / warn / escalate, with a note); Admins and Managers get 403. `MAVEN_AI_FLAGGING=0` turns it off. Retention built (decided flags deleted after `MAVEN_AI_FLAG_RETENTION_DAYS`, default 180; open flags kept). Employee notice built: while flagging is on, the login page shows a monitoring notice (`MAVEN_AI_MONITORING_NOTICE` to reword). **Next for flagging:** admin-editable rules and keywords, a local classifier (Phase 6).
+
+**Audit log v1 (built 2026-10-08):** hash-chained `audit_events` table (`src/audit.py`); sign-ins (ok, failed, rate-limited, bad 2FA), role and clearance changes with before/after, and every mutating request under the admin, auth, compliance, token, webhook, endpoint, MCP, vault and import routes, plus full exports; read-only view with filters and an integrity check in the console for admin.view and compliance.review. Not yet: break-glass, a test that every sensitive action writes an entry, anchoring the head hash outside Maven. **Next for the console:** usage views; read-only views of the existing admin settings for Managers, after each one is checked for secrets it might show.
+
+### 3.3 Labels on data
+
+- Every document, chunk, graph node and edge, session, generated file and memory stores `owner`, `team`, `label` and optional `grants`.
+- Labels come from the knowledge-base folder (e.g. `/Finance/*` defaults to Confidential), from the uploader (who can raise a label but not lower it below the folder default), and from a classifier (§3.5). **The highest of these wins.**
+- Files Maven generates inherit the highest label of their inputs.
+
+### 3.4 Taint tracking: how leaks are stopped
+
+The session's level is the highest label it has read (retrieved chunks, attachments, tool results).
+
+| Session level | Outbound tools (email send, webhooks, web fetch, external MCP) | Export / download | Share with |
+| --- | --- | --- | --- |
+| Public / Internal | allowed | allowed | anyone in scope |
+| Confidential | needs per-call approval, and the DLP scan (§3.5) must pass | watermarked, logged | only users with Confidential+ clearance and scope |
+| Restricted | **blocked** | admin policy (default: block), watermarked, logged | named users with Restricted clearance only |
+
+Web fetches are checked for data carried in the URL or query string. Model answers are never cached across users.
+
+### 3.5 Data loss prevention (DLP) and classification
+
+- **Detectors, all running locally:** PII (names, IDs, IBANs, card numbers, emails, phone numbers), secrets (API keys, private keys), finance patterns, contract markers, and custom company dictionaries (project code names, client names).
+- **Where they run:** on ingest (to propose a label), on every outbound tool call and export, on what gets promoted to the graph, and on logs (logs store redacted text).
+- **Proposal:** start with rules plus a small local NER model. Add an LLM classifier only for borderline cases. **[DECIDE D-2-3: Microsoft Presidio (MIT) as the PII engine, after verifying its license and fit]**
+
+### 3.6 Identity
+
+- Roles and clearance live in `data/auth.json` for now (built). Phase 2 moves users into database tables (`users`, `teams`, `departments`, `user_roles`, `grants`), in Postgres for corporate installs, migrating existing users in place.
+- **PostgreSQL rollout (D-2-1).** Built 2026-10-07: `docker/postgres.yml` overlay (internal network only, volume, required password); bare `postgresql://` URLs pinned to the shipped psycopg2 driver (SQLAlchemy 2.1 defaulted to psycopg v3, so Postgres never started); startup migrations read columns through a dialect-neutral helper instead of `PRAGMA`; the email MCP server reads accounts from `DATABASE_URL`; `scripts/maven-db copy-to-postgres` moves `app.db`; live-PostgreSQL tests behind `MAVEN_AI_TEST_POSTGRES_URL`. Verified by hand: login, roles, sessions, chat, history, notes, documents, archive/export/delete on a fresh and on a copied database. Backups (2026-10-08): `maven-backup` uses the app's real data folder and exports every table of a non-SQLite database (`src/db_export.py`); `maven-db load-export` loads it into an empty database; CLIs now read `.env`. History search on Postgres (2026-10-08): ranked full-text search over a GIN index (`simple` config, inline media left out, long messages cut so indexing never blocks a save). **Still to do:** run the whole suite against Postgres in CI (needs a `.github/` change, human-owned); scheduled-email, email-cache and lock files stay local SQLite by design.
+- SSO through OIDC (Entra ID, Okta, Keycloak) and SAML. Map directory groups to roles, teams and clearance. SCIM provisioning in Phase 7.
+- A "permission matrix" test, generated from the route table, checks every endpoint × role and fails CI if a new endpoint has no policy.
+
+---
+
+## 4. Knowledge (R3, R10, R13, R14)
+
+### 4.1 Tier 0: personal memory (exists today)
+This is the user's own memories, owner-scoped. No change apart from adding labels.
+
+### 4.2 Tier 1: session knowledge (conversation-limited RAG)
+- **Built 2026-10-08 (v1):** `search_chat_files` agent tool (`src/session_knowledge.py`): BM25 over overlapping chunks of the chat's own Documents (where attachments' full text lands), scoped in the query to session + owner; offered whenever the chat has documents. `manage_documents` schema now advertises read + offset. Not yet: embeddings, pinned tool outputs, shared-session participants.
+- Each session has its own index namespace. It holds that session's attachments, linked documents, pasted resources, and the tool outputs the user pinned.
+- Only the session's participants can query it. It is deleted with the session, or kept per the retention policy.
+- **Shared sessions:** an owner adds participants as editor or viewer. Adding someone is checked against the session's level (§3.4). Participants share the Tier-1 index and each sees the others' messages. Per-participant personal memory is **never** shared.
+- Retrieval order inside a session: Tier 1 first, then Tier 2 filtered by permission, then personal memory. Answers cite which tier each fact came from.
+
+### 4.3 Tier 2: company knowledge graph
+- **Sources:**
+  - knowledge-base folders curated by Managers
+  - uploaded document sets
+  - later, read-only connectors (SharePoint, network shares, Confluence) running inside the network
+  - **approved promotions from chats**
+- **Promotion pipeline** (replaces "store context from all chats"):
+  1. After a useful conversation, Maven proposes a short list of facts or decisions, each with a citation back to the chat.
+  2. The author confirms what may be shared and picks the audience (team / department / company), capped by the session's level.
+  3. The team's knowledge owner (a Manager) approves, edits or rejects.
+  4. The promoted fact becomes a graph node, keeping its provenance, label and ACL.
+- **Graph model:**
+  - entities: person, team, client, project, contract, product, metric, document, decision
+  - relations, each with a source, time and confidence
+  - every node and edge carries a label and scope
+- **Retrieval (GraphRAG as a LangGraph flow):**
+  1. Route: does this question need company knowledge?
+  2. Entity linking.
+  3. Graph neighbourhood + passage retrieval, **both filtered by permission inside the store.**
+  4. Rerank.
+  5. Answer with citations.
+
+  Retrieved text always goes through `untrusted_context_message` (it is data, not instructions).
+- **Freshness and quality:** re-ingest when a source changes; flag contradictions between sources ("Contract A says 30 days, Policy B says 45"); show an "as of" date on facts.
+- **Store:** a separate graph service (D-0-4 still holds: `graph_service/`, HTTP at `MAVEN_GRAPH_URL`, local or remote, token/mTLS + TLS). Candidate engines, all to be verified for license, maintenance and fit before a proposal: **PostgreSQL + Apache AGE + pgvector** (recommended: one store, row-level security, permissive licenses) or Neo4j Community. **[DECIDE D-2-4]**
+
+### 4.4 Quality gates
+- A golden question set per pilot company: answer accuracy, citation correctness, and **zero cross-scope leaks**.
+- A leak red-team suite: users at lower clearance try prompt injection, "summarise everything about X", or indirect questions to pull Restricted facts. Any leak fails CI.
+
+---
+
+## 5. Documents, analysis and reports (R2, R4, R9, R11, R12, R15, R16)
+
+### 5.1 File tools (R12)
+
+| Format | Read / extract (today → target) | Create (target) |
+| --- | --- | --- |
+| PDF | pypdf text, plus PyMuPDF (optional) → add layout-aware tables, **OCR for scanned pages** (Tesseract/ocrmypdf, local), and form fields (`pdf_forms.py` exists) | Render from Markdown/HTML with company templates (header, footer, watermark, label banner) |
+| DOCX | markitdown (optional) → python-docx for structure: headings, tables, tracked changes, comments | python-docx from templates (letterhead, styles); fill templates (contracts, memos) |
+| XLSX / CSV | markitdown text dump → **typed tables**: sheets, headers, data types, formulas kept, named ranges; large files streamed | openpyxl: multiple sheets, formulas, number formats, frozen headers, native charts |
+| PPTX | markitdown → slide text, speaker notes, tables | python-pptx from a company master: title, chart and table slides |
+
+- **Built 2026-10-07: file creation.** `src/file_builder.py` (xlsx/docx/pptx/pdf/csv from one spec; formula-injection safe; size limits), `src/file_store.py` (stored as the caller's own upload, owner-only download), `POST /api/files/create`, and the `create_file` agent tool (registered in schemas, tool index, capabilities, plan-mode mutators). Libraries openpyxl, python-docx, python-pptx, reportlab (MIT/BSD, in ACKNOWLEDGMENTS). Still to do in §5.1: company templates (letterhead, slide master), charts inside xlsx/pptx, a UI button, read/extract improvements (OCR, tables, schema extraction).
+- **Structured extraction:** pull to a schema (invoice fields, contract clauses such as parties, term, renewal, liability cap, payment terms) with a **citation to the page, cell or paragraph** for every field. Users can review the result as a table before it is saved.
+- **Agent tools:** `file_read`, `file_extract_tables`, `file_extract_schema`, `file_create_{xlsx,docx,pdf,pptx,csv}`, `sheet_query` (SQL over the uploaded tables), `sheet_write_back`.
+- **Sheets (R2):** on-prem, without Google Sheets. Use the vendored SheetJS viewer/editor in the app. Later, optionally integrate OnlyOffice or Collabora for full office editing. **[DECIDE D-2-5]**
+- **Dependencies:** move document extraction from optional to standard in the corporate build. Verify every library's license and record it in ACKNOWLEDGMENTS.
+
+### 5.2 Data analysis (R15)
+- **Built 2026-10-08 (step 1, no sandbox needed):** `analyze_data` agent tool (`src/data_analysis.py`): describe / filter / group-by (date buckets month, quarter, year) with sum, mean, count, min, max, median / top-N over the caller's own .xlsx or .csv upload (owner-checked, never the admin override); messy business numbers parsed; defaults to the newest spreadsheet in the chat. Fixed operations, no code execution, so open to every role. The sandboxed pandas runtime below is still needed for free-form analysis.
+- **Sandbox:** a separate container with no network, a read-only input mount, CPU/RAM/time limits and a seccomp profile, running pandas, numpy and statsmodels. Small jobs can run in the browser with Pyodide instead. Never use the host Python tool. **[DECIDE D-2-6: container sandbox (recommended) vs Pyodide only]**
+- **Flow:** profile the data (code, not the model) → the model writes analysis code → the sandbox runs it → the result is shown with the code ("show work") → the numbers in the answer come only from the result.
+- **Finance helpers:** period-over-period, variance, budget vs actual, ratios, currency and number formatting, and reconciliation checks (totals must add up, or Maven says why they don't).
+- **Unstructured data:** themes, sentiment and entity counts across documents, emails or tickets, then turned into tables the analysis tools can use.
+
+### 5.3 Visualization and reports (R9, R11, R16)
+- Keep v1's design: the data profiler → intent → a rules table of chart candidates ranked Simple/Detailed/Advanced → the model ranks and explains → validate, then repair up to 2 times.
+- **Renderers, vendored locally (licenses verified):** Vega-Lite (charts), Mermaid (already vendored; flows and org charts), Cytoscape.js (graph views).
+- **Report builder:** a report is a Document made of sections: text, chart, table, diagram, KPI tiles, citations.
+  - It can be edited in the existing editor.
+  - It exports to PDF, DOCX or PPTX through the §5.1 creators.
+  - It carries the highest label of its data and gets a label banner.
+  - Every chart offers "show data" and links to its source.
+- **Templates:** monthly finance pack, project status, sales pipeline, board summary.
+
+---
+
+## 6. Oversight (R19)
+
+- **Flagging, Phase 2 (rules):** attempts to reach data above the user's clearance, bulk-export or exfiltration patterns, prompt-injection and jailbreak patterns, and company keyword lists. **Phase 6 (classifier):** a small local model for harassment, abuse and clearly non-work misuse, with thresholds the company sets.
+- **Review queue for the Compliance role:** reviewers see the flagged excerpt and its context window, not the whole history. Escalation to full access needs a reason and is audited. Outcomes are dismiss, warn or escalate. Maven itself never punishes anyone automatically.
+- **Employee transparency:** a configurable notice in the UI explains what is logged and flagged. Retention periods are configurable, and the company decides whether flag outcomes are shown to the user. **Monitoring employees has legal rules** (GDPR, works councils in parts of the EU), so the deploying company's counsel must sign off on its configuration. Ship a DPIA template.
+- **Audit log** (append-only, hash-chained so tampering is detectable): logins, role changes, data access by label, tool calls, exports, shares, promotions, break-glass use, and flag decisions. Admin and Compliance can export it to the company's SIEM (syslog or JSON).
+
+---
+
+## 7. Productization (R20)
+
+| Area | Deliverable |
 | --- | --- |
-| Ingestion pipeline | `.xlsx`/`.csv`/`.pdf`/`.docx`/`.pptx`. Structured inputs become typed tables (SQLite). Unstructured inputs become chunks plus entities and relations. Every fact carries its source document, page or cell, team, and ingest time. |
-| Knowledge graph store | **Decided (D-0-4):** a **separate graph service in this repo** (`graph_service/`: its own container, requirements and tests). Maven reaches it only over HTTP through `src/knowledge/` at `MAVEN_GRAPH_URL`. It runs locally (compose, internal network) or on a remote server (token/mTLS auth plus TLS required). The graph engine inside the service is chosen after verifying the candidates' licenses and maintenance; it is proposed to the human first. |
-| GraphRAG retrieval as a LangGraph flow | route (does this need company knowledge?) → graph query + passage retrieval → answer with citations. Retrieved content always goes through `untrusted_context_message`. |
-| Sheets integration (R2) | Open, preview and query sheets in chat; write results back to a new sheet. SheetJS is already vendored. |
+| Install | Docker Compose bundle; an **offline / air-gapped bundle** with images and models; hardware sizing guide (small / medium / large); later a Helm chart |
+| Updates | Signed releases, automatic database migrations, a pre-upgrade backup, rollback |
+| Backup | One command and a UI flow covering the database, vectors, graph and files; encrypted; restore tested in CI |
+| Encryption | TLS everywhere; data at rest on encrypted volumes (documented); secrets via the existing `secret_storage` |
+| Identity | OIDC/SAML SSO, SCIM, mapping directory groups to roles |
+| Admin console | Users, roles, clearance, teams, knowledge sources, models, policies, usage dashboards |
+| Trust pack | Security whitepaper, threat model, data-flow diagram, DPIA template, controls mapped to ISO 27001 / SOC 2 themes, results of an external pen test |
+| Commercial | **AGPL constraints:** the code cannot be relicensed (351 contributors, no CLA), and customers who receive Maven get its source. Revenue therefore comes from **subscriptions for support and updates, installation, training, SLAs, managed hosting on the customer's own hardware, and certified appliance bundles.** Add-ons linked into Maven are AGPL as well. **Counsel reviews this before the first sale.** **[DECIDE D-2-7]** |
+| Name | "Maven" trademark search before launch (Apache Maven, Project Maven, Maven AGI were flagged in D-1c-1). The name lives in one constant, so a change is cheap. |
+| Pilot | One design-partner company, starting at the end of Phase 3 |
 
-**Re-banding (the default; the human can reject it):** documents/RAG and the knowledge base become **core**, so a new owner `knowledge-core` is split out of `workspace-apps` when Phase 2 creates `src/knowledge/`. Its OWNERSHIP rules land in the same change.
+---
 
-## Phase 3: visualization (R9, R10, R11) (sprint: chat-core + agent-core)
+## 8. Phases and order
 
-- **Data profiler:** column types, cardinality, time, hierarchy, flows, links. It is code, not the model.
-- **Intent classification:** compare, trend, composition, distribution, relationship, flow, connections.
-- **Recommendation:** a rules table maps (shape × intent) to diagram candidates, ranked Simple → Advanced. The model only ranks them and explains each in one sentence.
-- **Renderers,** bundled locally:
-  - Mermaid (already vendored) for processes and diagrams
-  - Vega-Lite for data charts and linked dashboards
-  - Cytoscape.js for knowledge-graph network views
+Only the **active** phase gets tickets. Each phase lands behind a GREEN full gate.
 
-  Each library's license is verified before it is vendored.
-- **Validate before showing:** a broken spec goes back to the model for repair, up to 2 retries. Templates are used for the complex types.
-- **"Show data" and a source citation on every chart.** Export to PNG/SVG and to a sheet.
-- **Learned preferences** per team and persona, stored locally.
+| Phase | Content | Exit (done-when) |
+| --- | --- | --- |
+| **0** | Shrink the test baseline (Windows harness fixes) | Baseline ≤ 40 entries, each with a reason |
+| **1** | 1a local-only mode; 1b hardening (SSRF fix, admin-tool tests, audit-log v1); **1c rename (S-1)** | No-egress test and CSP test; rename completeness test; full gate GREEN |
+| **2 (new)** | **Identity and governance:** user/team/role/clearance tables and migration; labels on all stored items; a single policy engine; permission-matrix test; taint tracking; DLP v1; flagging rules v1; hash-chained audit log; break-glass; Postgres option (D-2-1) | Permission-matrix test covers 100% of routes; leak red-team v1 passes; existing users migrate without data loss |
+| **3** | **Files and sessions:** the R12 file tools; structured extraction; the sheets viewer and write-back; **Tier-1 session RAG**; **shared sessions** | Round-trip tests per format (read → create → read again); a session index never answers outside its session; share checks enforce clearance |
+| **4** | **Company knowledge:** graph service, ingestion connectors, the promotion pipeline, GraphRAG, contradiction flags | Golden-set accuracy target met; **zero** cross-scope leaks in the red-team suite |
+| **5** | **Analysis and reports:** analysis sandbox, finance helpers, chart pipeline, report builder and exports | Every number in a report traces to a computed result; the sandbox has no network (tested) |
+| **6** | **People and oversight:** personas and recommendation; Simple mode as the default for non-admins; flag classifier; Compliance console | Usability test with non-technical staff; flag precision/recall measured on a labelled set |
+| **7** | **Ship:** offline installer, SSO/SCIM, upgrades, backup/restore, trust pack, pen test, pilot go-live | A pilot company runs Maven in production for 30 days |
 
-## Phase 4: people (R5, R6)
+**What runs in parallel:** the trust-pack writing and the D-2-* decisions can start now. Phase 3's file creators do not depend on the graph, and may start once Phase 2's label fields exist.
 
-- **Team personas:** prompt, default knowledge scope, tools, and preferred chart complexity, per team.
-- **Automatic persona recommendation** from the question and the parts of the graph it touches.
-- **Simple mode:** a single chat box plus "Ask about a document" and suggested actions, with no model or provider jargon. It is the default for non-admin users. Advanced mode is admin-only.
+---
 
-## Fleet changes by phase
+## 9. Proof points (tests that back the pitch)
+
+| Claim | Test |
+| --- | --- |
+| Nothing leaves your network | In local-only mode, an egress test records every outbound socket; only allowlisted hosts are reached |
+| People see only what they're allowed | A permission-matrix test (route × role); retrieval tests (label × clearance × scope) for the vector store, the graph and the analysis sandbox |
+| The AI can't be tricked into leaking | The leak red-team suite runs on every gate |
+| Every number is real | The report-trace test: each figure maps to a sandbox result or a source cell |
+| Everything is auditable | Audit-chain integrity test; a test that every sensitive action writes a log entry |
+
+---
+
+## 10. Legal guardrails (unchanged from v1, apply to every phase)
+
+- **Maven stays AGPL-3.0-or-later** (relicensed 2026-06-09, `23f0d64e`; 351 contributors; no CLA).
+- **Keep:** `LICENSE`, the "Odysseus Contributors" notices, `ACKNOWLEDGMENTS.md`, `licenses/*` (MIT and Apache; Apache also needs a statement of changes).
+- **Done in S-1:** the AGPL §5a modified-version notice (`NOTICE.md`) and the §13 "Source" link in the UI.
+- **Remove** the Odysseus name and logos from the product (no trademark grant). "Based on Odysseus" is fine.
+- **New dependencies:** each needs a license line in ACKNOWLEDGMENTS, verified from the repo, not from memory.
+- **Counsel** signs off on the AGPL position, the monitoring features (§6) and the trademark before any customer deployment. That is human-owned.
+
+---
+
+## 11. Fleet changes by phase
 
 | Phase | Change |
 | --- | --- |
 | 0–1 | No new agents. |
-| 2 | Add `knowledge-core` (sonnet, sprint lead), owning `src/knowledge/`, ingestion and graph retrieval. That is 15 agents. Self-review checks whether `workspace-apps` shrinks enough to justify it. |
-| 3–4 | No new agents unless the evidence asks for one. Visualization belongs to chat-core (rendering) and agent-core (the data query tool). |
+| 2 | `security-core` leads. Proposed new agent: `governance-core` (policy engine, labels, DLP, audit, flagging), split out of `security-core` if Phase 2 makes it too large. Self-review decides. |
+| 3 | `workspace-apps` owns the file tools; `chat-core` owns shared sessions. |
+| 4 | Add `knowledge-core` (from v1), owning `src/knowledge/`, `graph_service/`, ingestion and retrieval. |
+| 5 | `agent-core` owns the analysis sandbox and data tools; `chat-core` owns rendering and the report builder. |
+| 6–7 | `docs-keeper` owns the trust pack; there is no agent for the pen test or legal review (human-owned). |

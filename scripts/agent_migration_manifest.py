@@ -559,7 +559,7 @@ def build_manifest(args) -> dict[str, Any]:
 
 
 def parse_args(argv: list[str] | None = None):
-    parser = argparse.ArgumentParser(description="Build a neutral Odysseus agent migration manifest.")
+    parser = argparse.ArgumentParser(description="Build a neutral Maven agent migration manifest.")
     parser.add_argument("--source-name", default="agent-export", help="Human-readable source name.")
     parser.add_argument("--source-kind", default="generic", help="Source adapter kind, e.g. generic, openclaw, hermes.")
     parser.add_argument(

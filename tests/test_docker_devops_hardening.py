@@ -32,7 +32,7 @@ TEST_DOCS = [
 
 def _compose_env_names(path: Path) -> set[str]:
     compose = yaml.safe_load(path.read_text(encoding="utf-8"))
-    env = compose["services"]["odysseus"]["environment"]
+    env = compose["services"]["maven"]["environment"]
     return {entry.split("=", 1)[0] for entry in env}
 
 
@@ -54,10 +54,28 @@ def _cors_allow_methods() -> list[str]:
 
 
 def test_compose_files_forward_every_upload_limit_env_var():
-    expected = _upload_limit_env_names()
+    # The app reads ODYSSEUS_*; compose forwards the MAVEN_AI_* name, which
+    # docker/entrypoint.sh copies onto the legacy name inside the container.
+    expected = {n.replace("ODYSSEUS_", "MAVEN_AI_", 1) for n in _upload_limit_env_names()}
     assert expected
     for path in COMPOSE_FILES:
         assert expected <= _compose_env_names(path), path.name
+
+
+def test_compose_maven_names_fall_back_to_legacy_names():
+    for path in COMPOSE_FILES:
+        env = yaml.safe_load(path.read_text(encoding="utf-8"))["services"]["maven"]["environment"]
+        for entry in env:
+            name, value = entry.split("=", 1)
+            if name.startswith("MAVEN_AI_"):
+                legacy = "ODYSSEUS_" + name[len("MAVEN_AI_"):]
+                assert value.startswith(f"${{{name}:-${{{legacy}:-"), (path.name, entry)
+
+
+def test_entrypoint_copies_maven_names_onto_legacy_names_before_use():
+    script = (ROOT / "docker" / "entrypoint.sh").read_text(encoding="utf-8")
+    shim = script.index('export ODYSSEUS_${_maven_name}=')
+    assert shim < script.index("ODYSSEUS_ENABLE_HOST_DOCKER")
 
 
 def test_compose_files_forward_companion_base_url():
@@ -73,11 +91,11 @@ def test_default_compose_files_do_not_mount_host_docker_socket():
 
 def test_host_docker_overlay_mounts_socket_and_adds_docker_group():
     overlay = yaml.safe_load(HOST_DOCKER_OVERLAY.read_text(encoding="utf-8"))
-    service = overlay["services"]["odysseus"]
+    service = overlay["services"]["maven"]
 
     assert "/var/run/docker.sock:/var/run/docker.sock" in service["volumes"]
     assert "${DOCKER_GID:-963}" in service["group_add"]
-    assert "ODYSSEUS_ENABLE_HOST_DOCKER=true" in service["environment"]
+    assert "MAVEN_AI_ENABLE_HOST_DOCKER=true" in service["environment"]
 
 
 def test_docker_entrypoint_gates_socket_group_plumbing_on_explicit_opt_in():
@@ -87,7 +105,7 @@ def test_docker_entrypoint_gates_socket_group_plumbing_on_explicit_opt_in():
     socket_group_block = script[block_start:block_end]
 
     opt_in_check = socket_group_block.index(
-        "[ \"${ODYSSEUS_ENABLE_HOST_DOCKER:-}\" = \"true\" ]"
+        "[ \"${MAVEN_AI_ENABLE_HOST_DOCKER:-${ODYSSEUS_ENABLE_HOST_DOCKER:-}}\" = \"true\" ]"
     )
     socket_check = socket_group_block.index("[ -S \"$DOCKER_SOCK\" ]")
     stat_socket = socket_group_block.index("stat -c")

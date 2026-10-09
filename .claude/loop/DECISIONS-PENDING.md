@@ -68,7 +68,35 @@ Interpretation, binding for Phase 2:
 ### D-1c-4  Logo
 **Answer: concept B, "Secure M"**: an M inside a rounded vault shape, with an accent keyhole dot (#e06c75), on the app palette (#282c34 / #9cdef2). The human picked it from the concepts canvas https://claude.ai/artifact/Uc4Y6HdPCamTiycVF1ZQSf. Master files are in `.claude/brand/b-secure-m/` (concept C, the prompt mark, is saved in `.claude/brand/c-prompt-mark/` for later, at the human's request): mark, light mark, solid favicon, wordmark lockup (SVG), plus icon-192/512, maskable-512 and favicon-16/32 (PNG). Below 32px the keyhole dot drops and the tile fills solid.
 
+## Answered (human, 2026-10-07)
+
+### D-2-1  Corporate database
+**Answer: PostgreSQL.** SQLite stays for single-user installs.
+
+### D-2-2  Default clearance per role
+**Answer: each role's default clearance applies to a new user unless an Administrator sets it.** The defaults are the plan §3.2 table.
+
+### D-2-8  Admin console and multiple roles (new)
+**Answer (human's words, summarised):**
+- Add a default admin account. There is always a default user with admin access.
+- Add an admin page for monitoring, decisions and changes.
+- Compliance Officers and Managers can open it, but most of its tools are locked by access. Managers can only see things, with no changes. Compliance Officers can do their duties and nothing else.
+- Each user can have multiple roles.
+
 ## Pending
+
+### D-2-1 … D-2-7  Plan v2 decisions (main loop, 2026-10-07)
+kind: product decisions. See MAVEN_PLAN.md v2. None blocks Phase 0 or 1; D-2-1 and D-2-2 must be answered before Phase 2 opens.
+- D-2-1 and D-2-2: answered 2026-10-07 (see Answered).
+- **D-2-3 PII/DLP engine.** A) Presidio + rules + small local NER, after the license is verified (recommended). B) Rules only.
+- **D-2-4 Graph engine inside `graph_service/`.** A) PostgreSQL + Apache AGE + pgvector (recommended, pending verification). B) Neo4j Community. C) Decide after a spike that compares both on a pilot corpus.
+- **D-2-5 Sheets editing.** A) The vendored SheetJS viewer/editor now; OnlyOffice/Collabora integration later (recommended). B) Integrate OnlyOffice/Collabora now.
+- **D-2-6 Analysis runtime.** A) A no-network container sandbox, with Pyodide for small jobs (recommended). B) Pyodide only.
+- **D-2-7 Business model under AGPL.** Counsel reviews: subscriptions for support and updates, installation, SLA, appliances. No proprietary add-ons linked into Maven.
+if no answer: Phase 2 does not open.
+
+### D-1c-6 status (2026-10-07)
+Option A applied on `claude/bold-lovelace-pppvnh`: SECURITY.md L3/13/15/22/24 and THREAT_MODEL.md L3/7 now say Maven. `odysseus.db` (SECURITY.md L32) and `X-Odysseus-Internal-Token` are real names and were left unchanged. website/, specs/, .github/ and ROADMAP.md are still pending.
 
 ### D-1c-7  Fine-tuned model prompts still say "Odysseus" (S-1, agent-core)
 context: The LoRA minimal prompts in src/agent_loop.py (~1770-1915) keep "Odysseus" ("Use Odysseus tool-call format"), because the `odysseus-qwen3` fine-tunes were trained on exactly that text. Changing it likely degrades those models.
@@ -100,6 +128,13 @@ Keep `X-Odysseus-Internal-Token` (L49) unchanged; it is a real header name (D-1c
 
 options: A) apply the SECURITY/THREAT_MODEL lines now and leave website/specs/.github for later (recommended, because those two are what a security reviewer reads); B) leave all until later.
 
+
+### D-3-1  Approval prompt on every file creation (main loop, 2026-10-08)
+kind: security trade-off
+
+context: An end-to-end run showed that `create_file` (and any other tool that writes) always asks "Allow this task to continue?" on the first use in a chat. The reason: MCP tool descriptions go into the prompt as untrusted context, and since upstream commit 2811c7e ("keep ambient context fail closed") that context arms the approval gate. The built-in browser MCP server is enough to trigger it, so this happens on every default install. People can choose "Allow for this chat session" to be asked once per chat.
+
+options: A) keep as is: safest, one click per chat (recommended for now); B) treat descriptions from Maven's own built-in MCP servers as trusted, and keep third-party servers fail-closed. This removes the prompt for normal use but needs a reliable "built-in" marker that a third-party server cannot fake; C) per-company setting for admins.
 
 ### D-0-5  Promote the gate baseline and commit the fleet scripts (Phase 0)
 kind: dependency (loop setup)

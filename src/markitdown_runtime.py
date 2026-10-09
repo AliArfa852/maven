@@ -72,6 +72,132 @@ def _extract_docx_native(path: str) -> str | None:
     return "\n\n".join(paragraphs) if paragraphs else None
 
 
+# Built-in readers (openpyxl / python-docx / python-pptx are core
+# dependencies since file creation landed), used when markitdown is absent.
+# Before, .xlsx and .pptx were dropped entirely without it.
+NATIVE_MAX_ROWS_PER_SHEET = 2_000
+NATIVE_MAX_CELL_CHARS = 500
+
+
+def _md_cell(value) -> str:
+    text = "" if value is None else str(value)
+    text = text.replace("|", "\\|").replace("\n", " ").strip()
+    return text[:NATIVE_MAX_CELL_CHARS]
+
+
+def _md_table(rows: list[list]) -> list[str]:
+    width = max((len(r) for r in rows), default=0)
+    if not width:
+        return []
+    padded = [[_md_cell(c) for c in r] + [""] * (width - len(r)) for r in rows]
+    out = ["| " + " | ".join(padded[0]) + " |", "|" + " --- |" * width]
+    out += ["| " + " | ".join(r) + " |" for r in padded[1:]]
+    return out
+
+
+def _extract_xlsx_native(path: str) -> str | None:
+    """Every sheet as a Markdown table (values, not formulas), row-capped."""
+    try:
+        from openpyxl import load_workbook
+        wb = load_workbook(path, read_only=True, data_only=True)
+    except Exception:
+        return None
+    parts: list[str] = []
+    try:
+        for ws in wb.worksheets:
+            rows, truncated = [], False
+            for i, row in enumerate(ws.iter_rows(values_only=True)):
+                if i >= NATIVE_MAX_ROWS_PER_SHEET:
+                    truncated = True
+                    break
+                if any(v not in (None, "") for v in row):
+                    rows.append(list(row))
+            if not rows:
+                continue
+            # Drop all-empty trailing columns read-only sheets often report.
+            last = max(max((j for j, v in enumerate(r) if v not in (None, "")), default=-1) for r in rows)
+            rows = [r[: last + 1] for r in rows]
+            parts.append(f"## Sheet: {ws.title}")
+            parts.extend(_md_table(rows))
+            if truncated:
+                parts.append(f"_(first {NATIVE_MAX_ROWS_PER_SHEET} rows shown)_")
+            parts.append("")
+    finally:
+        wb.close()
+    return "\n".join(parts).strip() or None
+
+
+def _extract_pptx_native(path: str) -> str | None:
+    """Slide titles, text, tables and speaker notes, in slide order."""
+    try:
+        from pptx import Presentation
+        prs = Presentation(path)
+    except Exception:
+        return None
+    parts: list[str] = []
+    for n, slide in enumerate(prs.slides, start=1):
+        title_shape = slide.shapes.title
+        title = title_shape.text.strip() if title_shape is not None and title_shape.has_text_frame else ""
+        title_id = title_shape.shape_id if title_shape is not None else None
+        parts.append(f"## Slide {n}" + (f": {title}" if title else ""))
+        for shape in slide.shapes:
+            # python-pptx returns a new proxy per access, so compare ids.
+            if shape.shape_id == title_id:
+                continue
+            if getattr(shape, "has_table", False) and shape.has_table:
+                parts.extend(_md_table([[c.text for c in row.cells] for row in shape.table.rows]))
+            elif shape.has_text_frame:
+                for para in shape.text_frame.paragraphs:
+                    line = "".join(r.text for r in para.runs).strip()
+                    if line:
+                        parts.append(f"- {line}")
+        if slide.has_notes_slide:
+            notes = slide.notes_slide.notes_text_frame.text.strip()
+            if notes:
+                parts.append(f"Notes: {notes}")
+        parts.append("")
+    return "\n".join(parts).strip() or None
+
+
+def _extract_docx_with_tables(path: str) -> str | None:
+    """Paragraphs and tables in document order via python-docx."""
+    try:
+        from docx import Document
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
+        doc = Document(path)
+    except Exception:
+        return None
+    parts: list[str] = []
+    for child in doc.element.body.iterchildren():
+        tag = child.tag.rsplit("}", 1)[-1]
+        if tag == "p":
+            para = Paragraph(child, doc)
+            text = para.text.strip()
+            if not text:
+                continue
+            style = (para.style.name if para.style is not None else "") or ""
+            if style.startswith("Heading") and style[-1:].isdigit():
+                parts.append("#" * min(int(style[-1]), 6) + " " + text)
+            elif style == "Title":
+                parts.append("# " + text)
+            elif "List" in style:
+                parts.append("- " + text)
+            else:
+                parts.append(text)
+        elif tag == "tbl":
+            parts.extend(_md_table([[c.text for c in row.cells] for row in Table(child, doc).rows]))
+        parts.append("")
+    return "\n".join(parts).strip() or None
+
+
+_NATIVE_EXTRACTORS = {
+    ".xlsx": _extract_xlsx_native,
+    ".pptx": _extract_pptx_native,
+    ".docx": _extract_docx_with_tables,
+}
+
+
 def convert_to_markdown(path: str) -> str | None:
     """Convert a document to Markdown text via markitdown.
 
@@ -85,14 +211,14 @@ def convert_to_markdown(path: str) -> str | None:
     try:
         markitdown_cls = load_markitdown()
     except RuntimeError:
-        if isinstance(path, str) and path.lower().endswith(".docx"):
-            text = _extract_docx_native(path)
-            if text:
-                logger.info(
-                    "markitdown not installed — used native .docx extractor for %s",
-                    path,
-                )
-                return text
+        ext = os.path.splitext(path)[1].lower() if isinstance(path, str) else ""
+        native = _NATIVE_EXTRACTORS.get(ext)
+        text = native(path) if native else None
+        if not text and ext == ".docx":
+            text = _extract_docx_native(path)  # zip/XML fallback, no python-docx
+        if text:
+            logger.info("markitdown not installed — used built-in %s reader for %s", ext, path)
+            return text
         logger.warning("markitdown not installed; cannot extract %s", path)
         return None
     try:

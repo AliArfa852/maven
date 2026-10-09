@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Console</title>
+  <link rel="icon" href="/static/brand/maven-favicon.svg" type="image/svg+xml">
+  <script src="/static/js/brand.js"></script>
+  <style nonce="{{CSP_NONCE}}">
+    :root {
+      --bg: #f6f7f9; --panel: #ffffff; --text: #1f2329; --muted: #5f6672;
+      --border: #dde1e6; --accent: #1f7a99; --accent-soft: #e3f3f8;
+      --warn: #8a5a00; --warn-soft: #fff4dc; --error: #b42318;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #21252b; --panel: #282c34; --text: #e6e9ee; --muted: #9aa3ae;
+        --border: #3a3f4b; --accent: #9cdef2; --accent-soft: #2f3a44;
+        --warn: #f0c36a; --warn-soft: #3a3324; --error: #e06c75;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text);
+      font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 14px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+    header h1 { font-size: 17px; margin: 0; flex: 1; }
+    header a { color: var(--accent); text-decoration: none; font-size: 13px; }
+    main { max-width: 1040px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+    section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    section h2 { font-size: 15px; margin: 0 0 4px; }
+    .sub { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+    .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px;
+      background: var(--accent-soft); color: var(--accent); margin: 0 4px 2px 0; white-space: nowrap; }
+    .sev-high { color: var(--error); font-weight: 600; }
+    td.excerpt { max-width: 420px; word-break: break-word; }
+    .actions button { margin: 0 4px 4px 0; }
+    .notice { background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 8px 12px; font-size: 13px; }
+    .error { color: var(--error); }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; }
+    label.role { display: inline-flex; align-items: center; gap: 4px; margin: 0 10px 4px 0; white-space: nowrap; }
+    textarea { width: 100%; font: 13px/1.4 ui-monospace, monospace; color: var(--text); background: var(--bg);
+      border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; }
+    select, button { font: inherit; font-size: 12px; color: var(--text); background: var(--bg);
+      border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+    button { cursor: pointer; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .status { font-size: 12px; color: var(--muted); min-height: 1em; }
+    .tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+    .tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none;
+      padding: 8px 12px; font-size: 13px; color: var(--muted); }
+    .tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+    .tabs .count { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 9px;
+      background: var(--warn-soft); color: var(--warn); font-size: 11px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .card { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--bg); }
+    .card .big { font-size: 22px; font-weight: 600; }
+    .card .sub { margin: 4px 0 0; }
+    .card a { color: var(--accent); font-size: 12px; text-decoration: none; }
+    .next h3, section h3 { font-size: 13px; margin: 18px 0 6px; }
+    .next ul { margin: 0; padding-left: 18px; font-size: 13px; }
+    .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+    .panel { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 10px 0; background: var(--bg); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 16px; }
+    .grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+    .grid label.wide { grid-column: 1 / -1; }
+    .grid label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
+    .seg { display: flex; gap: 16px; margin-bottom: 10px; font-size: 13px; }
+    .seg label { display: flex; align-items: center; gap: 6px; }
+    input[type=text], input[type=url], input[type=password], input[type=number] {
+      font: inherit; font-size: 13px; color: var(--text); background: var(--panel);
+      border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+    button.primary { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+    button.danger { color: var(--error); }
+    .ok { color: #1a7f37; }
+    @media (prefers-color-scheme: dark) { .ok { color: #7ee2a8; } }
+    .mono { font-family: ui-monospace, monospace; font-size: 12px; word-break: break-all; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="ac-title">Admin Console</h1>
+    <span id="ac-who" class="sub" style="margin:0"></span>
+    <a href="/">Back to app</a>
+  </header>
+  <main>
+    <p id="ac-denied" class="notice" hidden>Your roles don't include access to the Admin Console.</p>
+    <p id="ac-viewonly" class="notice" hidden>View only: you can see this page, but only an Admin can change it.</p>
+
+    <nav id="ac-tabs" class="tabs" role="tablist" aria-label="Admin Console sections" hidden></nav>
+
+    <section id="ac-overview" data-tab="overview" hidden>
+      <h2>Overview</h2>
+      <p class="sub">The state of this Maven server at a glance.</p>
+      <div id="ac-cards" class="cards"></div>
+      <div id="ac-next" class="next" hidden>
+        <h3>Next steps</h3>
+        <ul id="ac-next-list"></ul>
+      </div>
+    </section>
+
+    <section id="ac-models" data-tab="models" hidden>
+      <h2>Models and APIs</h2>
+      <p class="sub">Connect the AI models people can chat with: a model server on this computer or network (Ollama, LM Studio, llama.cpp, vLLM) or a cloud API (OpenAI, Anthropic, OpenRouter and others). Shared endpoints are available to every user; API keys are stored encrypted and never shown again.</p>
+      <div class="toolbar">
+        <button id="ac-ep-add" class="primary">Add a model</button>
+        <button id="ac-ep-scan">Find local model servers</button>
+        <button id="ac-ep-refresh">Check status</button>
+        <span id="ac-ep-status" class="status"></span>
+      </div>
+
+      <div id="ac-ep-form" class="panel" hidden>
+        <div class="seg" role="radiogroup" aria-label="Where the model runs">
+          <label><input type="radio" name="ac-ep-where" value="local" checked> On my computer or network</label>
+          <label><input type="radio" name="ac-ep-where" value="cloud"> Cloud API</label>
+        </div>
+        <div class="grid">
+          <label>Provider
+            <select id="ac-ep-preset"></select>
+          </label>
+          <label>Name
+            <input id="ac-ep-name" type="text" maxlength="80" placeholder="e.g. Ollama on this PC">
+          </label>
+          <label class="wide">Address (base URL)
+            <input id="ac-ep-url" type="url" spellcheck="false" placeholder="http://localhost:11434/v1">
+          </label>
+          <label class="wide" id="ac-ep-key-row">API key
+            <input id="ac-ep-key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the key from the provider's dashboard">
+          </label>
+          <label class="check wide"><input id="ac-ep-shared" type="checkbox" checked> Share with every user (otherwise only you can use it)</label>
+        </div>
+        <p id="ac-ep-hint" class="sub"></p>
+        <div class="toolbar">
+          <button id="ac-ep-test">Test connection</button>
+          <button id="ac-ep-save" class="primary">Save</button>
+          <button id="ac-ep-cancel">Cancel</button>
+        </div>
+        <p id="ac-ep-test-result" class="status"></p>
+      </div>
+
+      <div id="ac-ep-scan-result" class="panel" hidden></div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Address</th><th>Type</th><th>Status</th><th>Models</th><th>Key</th><th>On</th><th></th></tr></thead>
+          <tbody id="ac-ep-rows"></tbody>
+        </table>
+      </div>
+
+      <h3>Default models</h3>
+      <p class="sub">Which model new chats use, and the small fast model Maven uses for titles, summaries and tidy-up jobs.</p>
+      <div class="grid">
+        <label>Default chat model
+          <select id="ac-def-chat"></select>
+        </label>
+        <label>Utility model
+          <select id="ac-def-utility"></select>
+        </label>
+        <label class="check wide"><input id="ac-def-share" type="checkbox"> Use these defaults for every user (people can still pick another model in a chat)</label>
+      </div>
+      <div class="toolbar"><button id="ac-def-save" class="primary">Save defaults</button><span id="ac-def-status" class="status"></span></div>
+    </section>
+
+    <section id="ac-settings" data-tab="settings" hidden>
+      <h2>Settings</h2>
+      <p class="sub">Server-wide settings. Changes apply to everyone and are recorded in the audit log. More detailed options (voice, images, research, reminders) stay in the app's Settings panel.</p>
+
+      <h3>Accounts</h3>
+      <div class="grid">
+        <label class="check wide"><input id="ac-set-signup" type="checkbox"> Let people create their own account on the login page (otherwise only an Admin adds users)</label>
+      </div>
+
+      <h3>Features</h3>
+      <p class="sub">Switch features off for everyone.</p>
+      <div id="ac-features" class="grid"></div>
+
+      <h3>Web search</h3>
+      <div class="grid">
+        <label>Search provider
+          <select id="ac-set-search_provider">
+            <option value="searxng">SearXNG (self-hosted, included)</option>
+            <option value="duckduckgo">DuckDuckGo (no key)</option>
+            <option value="brave">Brave Search</option>
+            <option value="google_pse">Google Programmable Search</option>
+            <option value="tavily">Tavily</option>
+            <option value="serper">Serper</option>
+            <option value="disabled">Off</option>
+          </select>
+        </label>
+        <label>Results per search
+          <input id="ac-set-search_result_count" type="number" min="1" max="20">
+        </label>
+        <label>SafeSearch
+          <select id="ac-set-search_safesearch">
+            <option value="strict">Strict</option>
+            <option value="moderate">Moderate</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
+        <label class="secret">Brave API key<input id="ac-set-brave_api_key" type="password" autocomplete="off"></label>
+        <label class="secret">Tavily API key<input id="ac-set-tavily_api_key" type="password" autocomplete="off"></label>
+        <label class="secret">Serper API key<input id="ac-set-serper_api_key" type="password" autocomplete="off"></label>
+        <label class="secret">Google search API key<input id="ac-set-google_pse_key" type="password" autocomplete="off"></label>
+        <label>Google search engine ID (cx)<input id="ac-set-google_pse_cx" type="text" spellcheck="false"></label>
+      </div>
+
+      <h3>Assistant limits</h3>
+      <div class="grid">
+        <label>Max steps per request
+          <input id="ac-set-agent_max_rounds" type="number" min="1" max="200">
+        </label>
+        <label>Max tool calls per request (0 = no limit)
+          <input id="ac-set-agent_max_tool_calls" type="number" min="0" max="1000">
+        </label>
+        <label class="check wide"><input id="ac-set-agent_email_confirm" type="checkbox"> Emails the assistant writes wait for the user to approve before sending</label>
+      </div>
+
+      <h3>Server</h3>
+      <div class="grid">
+        <label class="wide">Public address (used in links in emails and alerts)
+          <input id="ac-set-app_public_url" type="url" placeholder="https://maven.example.com" spellcheck="false">
+        </label>
+      </div>
+      <div class="toolbar"><button id="ac-set-save" class="primary">Save settings</button><span id="ac-set-status" class="status"></span></div>
+    </section>
+
+    <section id="ac-users" data-tab="users" hidden>
+      <h2>Users and access</h2>
+      <p class="sub">A user can hold several roles. Clearance follows the highest role default unless an Admin sets it.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>User</th><th>Roles</th><th>Clearance</th><th></th></tr></thead>
+          <tbody id="ac-user-rows"></tbody>
+        </table>
+      </div>
+      <p id="ac-users-status" class="status"></p>
+    </section>
+
+    <section id="ac-compliance" data-tab="compliance" hidden>
+      <h2>Flagged conversations</h2>
+      <p class="sub">Messages that matched a flagging rule. You see a short excerpt with secrets and personal data masked, not the whole conversation. A flag is a prompt to look, not proof of wrongdoing.</p>
+      <p>
+        <label for="ac-flag-status" class="sub" style="margin:0">Show</label>
+        <select id="ac-flag-status">
+          <option value="open">Open</option>
+          <option value="escalated">Escalated</option>
+          <option value="warned">Warned</option>
+          <option value="dismissed">Dismissed</option>
+          <option value="all">All</option>
+        </select>
+        <span id="ac-flag-counts" class="sub"></span>
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>When</th><th>User</th><th>Why</th><th>Excerpt</th><th>Decision</th></tr></thead>
+          <tbody id="ac-flag-rows"></tbody>
+        </table>
+      </div>
+      <p id="ac-flags-status" class="status"></p>
+    </section>
+
+    <section id="ac-flag-settings" data-tab="compliance" hidden>
+      <h2>Flagging rules</h2>
+      <p class="sub">Watch-list keywords raise a low-severity flag when a message contains them (whole words, any case). Switch off a rule that flags too much ordinary work.</p>
+      <p id="ac-flagging-off" class="notice" hidden>Flagging is switched off on this server (MAVEN_AI_FLAGGING=0). Changes here take effect when it is switched back on.</p>
+      <label for="ac-keywords" class="sub" style="display:block;margin:0 0 4px">Watch-list keywords, one per line</label>
+      <textarea id="ac-keywords" rows="6" spellcheck="false"></textarea>
+      <p id="ac-env-keywords" class="sub" hidden></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>On</th><th>Rule</th><th>Category</th><th>Severity</th></tr></thead>
+          <tbody id="ac-rule-rows"></tbody>
+        </table>
+      </div>
+      <p><button id="ac-settings-save">Save rules</button></p>
+      <p id="ac-settings-status" class="status"></p>
+    </section>
+
+    <section id="ac-audit" data-tab="audit" hidden>
+      <h2>Audit log</h2>
+      <p class="sub">Sign-ins, access changes, compliance decisions and other admin actions: who, what, when and from where. No message content. Each entry is chained to the one before, so a changed or removed entry shows up when you check integrity.</p>
+      <p>
+        <label for="ac-audit-filter" class="sub" style="margin:0">Show</label>
+        <select id="ac-audit-filter">
+          <option value="">Everything</option>
+          <option value="auth.login">Sign-ins</option>
+          <option value="access.">Role and clearance changes</option>
+          <option value="http.">Admin requests</option>
+        </select>
+        <select id="ac-audit-outcome">
+          <option value="">Any outcome</option>
+          <option value="ok">Succeeded</option>
+          <option value="failed">Failed</option>
+          <option value="denied">Denied</option>
+        </select>
+        <button id="ac-audit-verify">Check integrity</button>
+        <span id="ac-audit-chain" class="sub"></span>
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>When</th><th>Who</th><th>What</th><th>Target</th><th>Outcome</th><th>From</th></tr></thead>
+          <tbody id="ac-audit-rows"></tbody>
+        </table>
+      </div>
+      <p><button id="ac-audit-more" hidden>Older entries</button></p>
+      <p id="ac-audit-status" class="status"></p>
+    </section>
+
+    <section id="ac-roles" data-tab="users" hidden>
+      <h2>Roles</h2>
+      <p class="sub">Default clearance and console access for each role.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Role</th><th>Default clearance</th><th>Console access</th></tr></thead>
+          <tbody id="ac-role-rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/static/js/admin-console.js"></script>
+</body>
+</html>

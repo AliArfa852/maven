@@ -11,13 +11,14 @@ from starlette.responses import Response
 from starlette.routing import get_route_path
 
 from src.owner_identity import INTERNAL_TOOL_USER, auth_disabled
+from src.brand import maven_env
 
 
 # Per-process token that lets the in-app tool layer hit admin-gated
 # routes via HTTP loopback (the agent's tool calls don't carry the
 # admin user's session cookie). Set once at import; tools read the
 # same value from this module. Never persisted or exposed externally.
-INTERNAL_TOOL_TOKEN = os.environ.get("ODYSSEUS_INTERNAL_TOKEN") or secrets.token_hex(32)
+INTERNAL_TOOL_TOKEN = maven_env("MAVEN_AI_INTERNAL_TOKEN") or secrets.token_hex(32)
 INTERNAL_TOOL_HEADER = "X-Odysseus-Internal-Token"
 
 
@@ -80,6 +81,30 @@ def require_admin(request: Request):
     user = getattr(request.state, "current_user", None)
     if not user or not auth_mgr.is_admin(user):
         raise HTTPException(403, "Admin only")
+
+
+def require_capability(request: Request, capability: str) -> None:
+    """Raise 403 unless the current user's roles grant ``capability``
+    (src/access.py). Same bypasses as require_admin: auth explicitly disabled,
+    and the in-process internal-tool loopback.
+    """
+    try:
+        hdr = request.headers.get(INTERNAL_TOOL_HEADER)
+        if hdr and secrets.compare_digest(hdr, INTERNAL_TOOL_TOKEN):
+            return
+        if getattr(request.state, "current_user", None) == INTERNAL_TOOL_USER:
+            return
+    except Exception:
+        pass
+
+    auth_mgr = getattr(request.app.state, "auth_manager", None)
+    if auth_disabled():
+        return
+    if not auth_mgr or not auth_mgr.is_configured:
+        raise HTTPException(403, "Not permitted")
+    user = getattr(request.state, "current_user", None)
+    if not user or not auth_mgr.has_capability(user, capability):
+        raise HTTPException(403, "Not permitted")
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

@@ -1,6 +1,8 @@
 # Acknowledgments
 
-Odysseus stands on the shoulders of a lot of open-source work. This file
+Maven is a modified version of Odysseus, Copyright (c) Odysseus Contributors, licensed under the GNU AGPL v3.0 or later. See NOTICE.md for details.
+
+Maven stands on the shoulders of a lot of open-source work. This file
 credits the projects whose code, assets, or designs are included in or
 adapted by this repository, and notes their licenses.
 
@@ -32,7 +34,7 @@ The full license texts are kept in [`licenses/`](licenses/).
   and `scripts/odysseus-cookbook`.
 - **[Tongyi DeepResearch](https://github.com/Alibaba-NLP/DeepResearch)** by
   **Alibaba-NLP / Tongyi Lab** — the multi-step deep-research agent pipeline.
-  Copyright © Alibaba-NLP / Tongyi Lab. **Apache-2.0.** Adapted for Odysseus's
+  Copyright © Alibaba-NLP / Tongyi Lab. **Apache-2.0.** Adapted for Maven's
   Deep Research feature (`services/research/`, `src/research_handler.py`,
   `routes/research_routes.py`, `services/search/`). Full text in
   [`licenses/DeepResearch-Apache-2.0.txt`](licenses/DeepResearch-Apache-2.0.txt).
@@ -42,7 +44,7 @@ The full license texts are kept in [`licenses/`](licenses/).
 ## Bundled via Docker Compose
 
 These services are pulled as images by the project's `docker-compose.yml`
-and run alongside Odysseus on `docker compose up`. They are not modified —
+and run alongside Maven on `docker compose up`. They are not modified —
 just composed.
 
 | Service | Image | Purpose | License |
@@ -125,6 +127,12 @@ Core (`requirements.txt`) and optional (`requirements-optional.txt`):
 | pyotp | MIT |
 | qrcode\[pil] | BSD-3-Clause |
 | croniter | MIT |
+| openpyxl (+ et-xmlfile) — Excel file creation | MIT |
+| python-docx — Word file creation | MIT |
+| python-pptx (+ XlsxWriter) — PowerPoint file creation | MIT (BSD-2-Clause) |
+| reportlab — PDF file creation and PDF charts | BSD-3-Clause |
+| Pillow — chart images in Word files | MIT-CMU (HPND) |
+| psycopg2-binary — PostgreSQL driver | LGPL-3.0-or-later (with exceptions; dynamically linked) |
 | pytest / pytest-asyncio | MIT / Apache-2.0 |
 | duckduckgo-search (optional) | MIT |
 | markitdown (optional — Office/EPUB text extraction) | MIT |
@@ -132,7 +140,7 @@ Core (`requirements.txt`) and optional (`requirements-optional.txt`):
 
 ## Companion services (interoperated with, not bundled)
 
-Odysseus talks to these over the network/API. They are **not** distributed
+Maven talks to these over the network/API. They are **not** distributed
 with this project; their licenses do not bind this codebase, but they deserve
 credit:
 
@@ -148,29 +156,23 @@ credit:
 
 ### License-compatibility notes (for the repo's own LICENSE choice)
 
-The **core ships fully permissive** (MIT-compatible), so the two copyleft
-concerns from earlier are resolved:
+Maven is distributed under **AGPL-3.0-or-later**. The bundled dependencies retain their own licenses, listed above:
 
-- **PDF text extraction** now uses **`pypdf`** (BSD-3-Clause) and **encoding
-  detection** uses **`charset-normalizer`** (MIT). chardet (LGPL-2.1) has been
-  removed entirely.
-- **PyMuPDF (AGPL-3.0)** is no longer a core dependency. It is **optional** and
-  used *only* by the PDF form-filling feature (`src/pdf_forms.py` and the form
+- **PDF text extraction** uses **`pypdf`** (BSD-3-Clause) and **encoding
+  detection** uses **`charset-normalizer`** (MIT).
+- **PyMuPDF (AGPL-3.0)** is **optional**, used *only* by the PDF form-filling feature (`src/pdf_forms.py` and the form
   endpoints in `routes/document_routes.py`), lazy-imported and listed in
-  `requirements-optional.txt`. The MIT core runs without it. If you choose to
-  install it, AGPL's network clause then applies to *that feature* for your
-  deployment (Artifex also sells a commercial PyMuPDF license that lifts this).
+  `requirements-optional.txt`. If you install it, its AGPL license applies to that feature (Artifex also sells a commercial PyMuPDF license).
 - **`caldav`** (Python lib) is **dual-licensed GPL-3.0-or-later OR Apache-2.0**.
-  Odysseus uses it under **Apache-2.0**, which is permissive and MIT-compatible.
+  Maven uses it under **Apache-2.0**.
 - **`markitdown`** (Microsoft) is **MIT** and used only as an *optional* dependency for Office/EPUB text
-  extraction (`src/markitdown_runtime.py`), lazy-imported with graceful fallback — the MIT core runs without
-  it. The cloud `az-doc-intel` extra is deliberately **not** installed, keeping extraction fully local.
+  extraction (`src/markitdown_runtime.py`), lazy-imported with graceful fallback. The cloud `az-doc-intel` extra is deliberately **not** installed, keeping extraction fully local.
 
 ---
 
 ## Thanks to
 
-Most of Odysseus's code was written *with* AI models, not just by a human.
+Most of upstream Odysseus's code was written *with* AI models, not just by a human.
 The project would not exist without them — credit where credit is due:
 
 - **gpt-oss-120b** — the legend that kicked this project off.

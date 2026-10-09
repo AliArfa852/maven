@@ -4,8 +4,10 @@ import os
 
 from fastapi import HTTPException, UploadFile
 
+from src.brand import legacy_env_name, maven_env
+
 DEFAULT_CHAT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
-CHAT_UPLOAD_MAX_BYTES_ENV = "ODYSSEUS_CHAT_UPLOAD_MAX_BYTES"
+CHAT_UPLOAD_MAX_BYTES_ENV = "MAVEN_AI_CHAT_UPLOAD_MAX_BYTES"
 
 
 def format_byte_limit(limit: int) -> str:
@@ -17,15 +19,24 @@ def format_byte_limit(limit: int) -> str:
 
 
 def read_byte_limit_env(name: str, default: int) -> int:
-    raw = os.getenv(name)
+    """Read a byte-count setting. For a MAVEN_AI_* name the legacy ODYSSEUS_*
+    name also works; any other name is read as-is.
+
+    Errors name whichever variable actually supplied the bad value.
+    """
+    if name.startswith("MAVEN_AI_"):
+        raw = maven_env(name)
+        source = name if name in os.environ else legacy_env_name(name)
+    else:
+        raw, source = os.getenv(name), name
     if raw is None or not raw.strip():
         return default
     try:
         limit = int(raw)
     except ValueError as exc:
-        raise ValueError(f"{name} must be an integer byte count") from exc
+        raise ValueError(f"{source} must be an integer byte count") from exc
     if limit < 1:
-        raise ValueError(f"{name} must be greater than 0")
+        raise ValueError(f"{source} must be greater than 0")
     return limit
 
 
@@ -35,29 +46,30 @@ def get_chat_upload_max_bytes() -> int:
 
 # Per-route upload byte-limits, single-sourced here (issue #3364). Each is
 # validated + env-overridable via read_byte_limit_env: set the matching
-# ODYSSEUS_*_MAX_BYTES env var to an integer byte count to tune it; an invalid
-# value fails fast at import rather than crashing mid-request. Defaults match
+# MAVEN_AI_* env var (the legacy ODYSSEUS_* name also works) to an integer
+# byte count to tune it; an invalid value fails fast at import rather than
+# crashing mid-request. Defaults match
 # the prior per-route values, so behavior is unchanged unless an env var is set.
 GALLERY_UPLOAD_MAX_BYTES = read_byte_limit_env(
-    "ODYSSEUS_GALLERY_UPLOAD_MAX_BYTES", 100 * 1024 * 1024
+    "MAVEN_AI_GALLERY_UPLOAD_MAX_BYTES", 100 * 1024 * 1024
 )
 GALLERY_TRANSFORM_UPLOAD_MAX_BYTES = read_byte_limit_env(
-    "ODYSSEUS_GALLERY_TRANSFORM_UPLOAD_MAX_BYTES", 25 * 1024 * 1024
+    "MAVEN_AI_GALLERY_TRANSFORM_UPLOAD_MAX_BYTES", 25 * 1024 * 1024
 )
 MEMORY_IMPORT_MAX_BYTES = read_byte_limit_env(
-    "ODYSSEUS_MEMORY_IMPORT_MAX_BYTES", 10 * 1024 * 1024
+    "MAVEN_AI_MEMORY_IMPORT_MAX_BYTES", 10 * 1024 * 1024
 )
 PERSONAL_UPLOAD_MAX_BYTES = read_byte_limit_env(
-    "ODYSSEUS_PERSONAL_UPLOAD_MAX_BYTES", 25 * 1024 * 1024
+    "MAVEN_AI_PERSONAL_UPLOAD_MAX_BYTES", 25 * 1024 * 1024
 )
 EMAIL_COMPOSE_UPLOAD_MAX_BYTES = read_byte_limit_env(
-    "ODYSSEUS_EMAIL_COMPOSE_UPLOAD_MAX_BYTES", 25 * 1024 * 1024
+    "MAVEN_AI_EMAIL_COMPOSE_UPLOAD_MAX_BYTES", 25 * 1024 * 1024
 )
 STT_MAX_AUDIO_BYTES = read_byte_limit_env(
-    "ODYSSEUS_STT_MAX_AUDIO_BYTES", 25 * 1024 * 1024
+    "MAVEN_AI_STT_MAX_AUDIO_BYTES", 25 * 1024 * 1024
 )
 ICS_MAX_BYTES = read_byte_limit_env(
-    "ODYSSEUS_ICS_MAX_BYTES", 10 * 1024 * 1024
+    "MAVEN_AI_ICS_MAX_BYTES", 10 * 1024 * 1024
 )
 
 

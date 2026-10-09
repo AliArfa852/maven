@@ -30,10 +30,10 @@ if [ -f .env ]; then
     done < .env
 fi
 
-# Shell overrides (ODYSSEUS_PORT / ODYSSEUS_HOST) take top priority, then .env
+# Shell overrides (MAVEN_AI_PORT / MAVEN_AI_HOST; legacy ODYSSEUS_*) take top priority, then .env
 # values (APP_PORT / APP_BIND), then built-in defaults.
-PORT="${ODYSSEUS_PORT:-${APP_PORT:-7860}}"   # 7860, not 7000 — macOS AirPlay Receiver holds 7000.
-HOST="${ODYSSEUS_HOST:-${APP_BIND:-127.0.0.1}}" # Set APP_BIND=0.0.0.0 in .env for LAN/Tailscale access.
+PORT="${MAVEN_AI_PORT:-${ODYSSEUS_PORT:-${APP_PORT:-7860}}}"   # 7860, not 7000 — macOS AirPlay Receiver holds 7000.
+HOST="${MAVEN_AI_HOST:-${ODYSSEUS_HOST:-${APP_BIND:-127.0.0.1}}}" # Set APP_BIND=0.0.0.0 in .env for LAN/Tailscale access.
 # The port only reaches uvicorn as a flag, so export it too: everything that
 # builds a URL for this instance — internal_api_base(), the companion pairing
 # code, the MCP OAuth callback — reads APP_PORT and would otherwise assume 7000.
@@ -51,7 +51,7 @@ echo "▶ Odysseus quick start for macOS"
 # Fail fast if the port is already taken (e.g. a previous run still running).
 if (exec 3<>"/dev/tcp/$PROBE_HOST/$PORT") 2>/dev/null; then
     echo "✗ Port $PORT is already in use on $PROBE_HOST. Stop what's using it, or pick another port:"
-    echo "    ODYSSEUS_PORT=7900 ./start-macos.sh"
+    echo "    MAVEN_AI_PORT=7900 ./start-macos.sh"
     exit 1
 fi
 
@@ -165,7 +165,7 @@ fi
 #    the first time (idempotent — does nothing if already set up). Suppress its
 #    manual run hint — we launch the server ourselves just below.
 echo "▶ Preparing Odysseus…"
-ODYSSEUS_SKIP_RUN_HINT=1 ./venv/bin/python setup.py
+MAVEN_AI_SKIP_RUN_HINT=1 ./venv/bin/python setup.py
 
 # Local provider bootstrap.
 #     On Apple Silicon macOS, Apfel is treated as a sibling local model server
@@ -217,7 +217,7 @@ else
 fi
 
 # 5. Launch. Bind to loopback by default; opt into LAN/Tailscale with
-#    ODYSSEUS_HOST=0.0.0.0.
+#    MAVEN_AI_HOST=0.0.0.0.
 URL_HOST="$HOST"
 if [ "$URL_HOST" = "0.0.0.0" ] || [ "$URL_HOST" = "::" ]; then
     URL_HOST="127.0.0.1"
@@ -234,9 +234,9 @@ fi
 # Open the browser automatically once the server is accepting connections — so
 # the URL isn't lost in the startup logs that keep scrolling. Runs in the
 # background and is cleaned up when the server stops. Skip with
-# ODYSSEUS_NO_OPEN=1 (e.g. over SSH / headless).
+# MAVEN_AI_NO_OPEN=1 (e.g. over SSH / headless; legacy ODYSSEUS_NO_OPEN).
 POLLER_PID=""
-if [ -z "$ODYSSEUS_NO_OPEN" ] && command -v open >/dev/null 2>&1; then
+if [ -z "${MAVEN_AI_NO_OPEN:-$ODYSSEUS_NO_OPEN}" ] && command -v open >/dev/null 2>&1; then
     (
         for _ in $(seq 1 90); do
             if (exec 3<>"/dev/tcp/$PROBE_HOST/$PORT") 2>/dev/null; then

@@ -31,6 +31,7 @@ from email.mime.multipart import MIMEMultipart
 
 from src.task_endpoint import resolve_task_candidates, task_llm_call_async
 
+from src.brand import maven_env
 from routes.email_helpers import (
     _strip_think, _extract_reply, _apply_email_style_mechanics, _load_settings, _save_settings, _get_email_config,
     _send_smtp_message,
@@ -1181,7 +1182,7 @@ async def _auto_summarize_pass_single(days_back: int = 1, account_id: str | None
                                     alert_body = (
                                         f"Your AI assistant flagged this email as {urgency.upper()} urgency.\n\n"
                                         f"Reason: {reason}\n\n"
-                                        + (f"Open in Odysseus: {open_url}\n\n" if open_url else "")
+                                        + (f"Open in Maven: {open_url}\n\n" if open_url else "")
                                         + f"---\n"
                                         f"From: {sender}\n"
                                         f"Subject: {subject}\n"
@@ -1196,7 +1197,7 @@ async def _auto_summarize_pass_single(days_back: int = 1, account_id: str | None
                                         f'<p><a href="{_h.escape(open_url)}" '
                                         'style="display:inline-block;padding:8px 14px;background:#50fa7b;'
                                         'color:#000;text-decoration:none;border-radius:4px;font-weight:bold">'
-                                        'Open in Odysseus</a></p>'
+                                        'Open in Maven</a></p>'
                                     ) if open_url else ""
                                     alert_html = (
                                         f'<div style="font-family:system-ui,sans-serif;max-width:640px">'
@@ -1407,9 +1408,9 @@ def _scheduled_poll_once() -> dict:
             try:
                 # Atomically claim this row before doing any work. Two
                 # pollers can race here (the in-process asyncio task and an
-                # externally cron-driven `odysseus-mail poll-scheduled`, or
+                # externally cron-driven `maven-mail poll-scheduled`, or
                 # an admin running the CLI manually alongside the in-process
-                # one despite the ODYSSEUS_INPROCESS_POLLERS=0 guidance) -
+                # one despite the MAVEN_AI_INPROCESS_POLLERS=0 guidance) -
                 # both can SELECT the same 'pending' row before either has
                 # updated its status. The UPDATE...WHERE status='pending' is
                 # the atomicity boundary: only the poller whose UPDATE
@@ -1498,7 +1499,7 @@ def _scheduled_poll_once() -> dict:
 async def _scheduled_email_poller():
     """Background task that checks for due scheduled emails every 30
     seconds. Each tick delegates to `_scheduled_poll_once`, which is
-    also exposed via the `odysseus-mail poll-scheduled` CLI for
+    also exposed via the `maven-mail poll-scheduled` CLI for
     cron-driven deployments."""
     import asyncio
 
@@ -1514,13 +1515,13 @@ _poller_task = None
 _summarize_task = None
 
 def _inprocess_pollers_enabled() -> bool:
-    """Honour `ODYSSEUS_INPROCESS_POLLERS` — set to `0`/`false`/`no`/`off`
+    """Honour `MAVEN_AI_INPROCESS_POLLERS` — set to `0`/`false`/`no`/`off`
     to disable the asyncio tasks so a cron / systemd-timer setup driving
-    `odysseus-mail poll-scheduled` is the sole external driver. The legacy
+    `maven-mail poll-scheduled` is the sole external driver. The legacy
     auto-summary/reply poller no longer starts here; scheduled Tasks own that
     work so Email settings are only feature gates, not a second scheduler."""
     import os
-    raw = os.environ.get("ODYSSEUS_INPROCESS_POLLERS", "1").strip().lower()
+    raw = maven_env("MAVEN_AI_INPROCESS_POLLERS", "1").strip().lower()
     return raw not in ("0", "false", "no", "off", "")
 
 
@@ -1528,13 +1529,13 @@ def _start_poller():
     """Start background pollers. Called at module load; if no event loop is
     running yet (common at import time), defer via a first-request hook.
 
-    Skipped entirely when `ODYSSEUS_INPROCESS_POLLERS=0` — use that when
+    Skipped entirely when `MAVEN_AI_INPROCESS_POLLERS=0` — use that when
     you're driving polling from cron / systemd to avoid two copies of
     `_scheduled_poll_once` racing on the same SQLite."""
     if not _inprocess_pollers_enabled():
         logger.info(
-            "In-process email pollers disabled (ODYSSEUS_INPROCESS_POLLERS=0); "
-            "drive `odysseus-mail poll-scheduled` externally."
+            "In-process email pollers disabled (MAVEN_AI_INPROCESS_POLLERS=0); "
+            "drive `maven-mail poll-scheduled` externally."
         )
         return
     import asyncio

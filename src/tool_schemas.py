@@ -593,7 +593,7 @@ FUNCTION_TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "manage_calendar",
-            "description": "Manage calendar events: list events in a date range, create, update, delete. Each event can carry a tag/category (event_type) and importance level. Resolve relative dates like today/tomorrow against the 'Current date and time' system context, then pass ISO 8601 datetimes in the user's local wall time; for all-day events set all_day=true and pass YYYY-MM-DD. For event reminders/alarms, pass reminder_minutes; the tool creates the Odysseus note reminder, so do not also call manage_notes for the same reminder. Do not set rrule for single-occurrence requests such as 'next Wednesday only'; use rrule only when the user explicitly wants recurrence.",
+            "description": "Manage calendar events: list events in a date range, create, update, delete. Each event can carry a tag/category (event_type) and importance level. Resolve relative dates like today/tomorrow against the 'Current date and time' system context, then pass ISO 8601 datetimes in the user's local wall time; for all-day events set all_day=true and pass YYYY-MM-DD. For event reminders/alarms, pass reminder_minutes; the tool creates the Maven note reminder, so do not also call manage_notes for the same reminder. Do not set rrule for single-occurrence requests such as 'next Wednesday only'; use rrule only when the user explicitly wants recurrence.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -613,7 +613,7 @@ FUNCTION_TOOL_SCHEMAS = [
                     "end": {"type": "string", "description": "list_events range end (ISO datetime). Use this for month/week requests after resolving the date range; defaults to +14 days only when no range is requested. Prefer end; backend also accepts end_time, end_date, range_end, to, dtend, until."},
                     "event_type": {"type": "string", "description": "Tag / category for the event. Common values: work, personal, health, travel, meal, social, admin, other. Aliases accepted: tag, category, type."},
                     "importance": {"type": "string", "enum": ["low", "normal", "high", "critical"], "description": "Priority level (defaults to 'normal')"},
-                    "reminder_minutes": {"type": "integer", "description": "For create_event: create an Odysseus reminder this many minutes before the event, e.g. 5 for 'reminder 5 min before'."},
+                    "reminder_minutes": {"type": "integer", "description": "For create_event: create a Maven reminder this many minutes before the event, e.g. 5 for 'reminder 5 min before'."},
                     "rrule": {"type": "string", "description": "Recurrence rule in iCalendar RRULE format, e.g. 'FREQ=WEEKLY;BYDAY=MO' for weekly on Monday. Use with create_event or update_event. For update_event, pass an explicit empty string to remove recurrence and make the event single-occurrence."}
                 },
                 "required": ["action"]
@@ -805,16 +805,75 @@ FUNCTION_TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
-            "name": "manage_documents",
-            "description": "Manage documents: list all documents (with optional search/language filter), delete documents, or run tidy cleanup.",
+            "name": "create_file",
+            "description": "Create a downloadable file for the user: Excel (xlsx), Word (docx), PowerPoint (pptx), PDF or CSV. Returns a link. Use when the user asks for a file in one of these formats (not for editor documents). Spreadsheets/CSV: spec.sheets=[{name, rows}] or spec.rows; the first row is the header. Word/PDF: spec.title + spec.blocks=[{type: heading|paragraph|bullets|table, text|items|rows}]. PowerPoint: spec.title + spec.slides=[{title, bullets} or {title, table} or {title, chart}]. Charts: a block or slide chart is {type: chart, kind: bar|barh|line|pie, title, categories: [...], series: [{name, values: [numbers]}]}; in a spreadsheet, a sheet's charts=[{kind, title, x: category column, y: [value columns]}] (0-based columns) plots the sheet's own data. Use only real data from the conversation or tools; never invent figures.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "action": {"type": "string", "enum": ["list", "delete", "tidy"]},
-                    "document_id": {"type": "string", "description": "Document ID (for delete)"},
+                    "format": {"type": "string", "enum": ["xlsx", "docx", "pptx", "pdf", "csv"],
+                               "description": "File type to create"},
+                    "filename": {"type": "string", "description": "File name without extension"},
+                    "spec": {"type": "object",
+                             "description": "Content: {title, blocks} for docx/pdf, {sheets} or {rows} for xlsx/csv, {title, slides} for pptx"}
+                },
+                "required": ["format", "spec"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_data",
+            "description": "Compute exact numbers from an uploaded Excel (.xlsx) or CSV file instead of estimating from the preview: describe the columns, filter rows, group by columns (date columns can be bucketed with ':month', ':quarter', ':year') with sum/mean/count/min/max/median, or list the top N rows. Leave file_id empty to use the newest spreadsheet in this chat. Use the result as the source for any figures, tables or charts you give.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "Upload id of the .xlsx/.csv (from 'Uploaded files attached'); empty = newest spreadsheet in this chat"},
+                    "sheet": {"type": "string", "description": "Excel sheet name (default: first sheet)"},
+                    "header_row": {"type": "integer", "description": "Row number holding the column names (default 1)"},
+                    "operation": {"type": "string", "enum": ["describe", "group", "top", "rows"], "description": "describe = columns and summary stats; group = group_by + aggregates; top = biggest/smallest rows by sort_by; rows = matching rows"},
+                    "where": {"type": "array", "description": "Filters applied first", "items": {"type": "object", "properties": {"column": {"type": "string"}, "op": {"type": "string", "enum": ["=", "!=", ">", ">=", "<", "<=", "contains", "not contains"]}, "value": {}}}},
+                    "group_by": {"type": "array", "items": {"type": "string"}, "description": "Columns to group by, e.g. [\"Region\"] or [\"Date:month\"]"},
+                    "aggregates": {"type": "array", "description": "For group", "items": {"type": "object", "properties": {"column": {"type": "string"}, "fn": {"type": "string", "enum": ["sum", "mean", "count", "min", "max", "median"]}}}},
+                    "sort": {"type": "string", "description": "For group: output column to sort by (default first aggregate; date buckets sort by time)"},
+                    "sort_by": {"type": "string", "description": "For top: numeric column to rank by"},
+                    "descending": {"type": "boolean", "description": "Default true"},
+                    "columns": {"type": "array", "items": {"type": "string"}, "description": "For top/rows: columns to show"},
+                    "limit": {"type": "integer", "description": "Max rows returned (default 50 for group/rows, 10 for top; at most 200)"}
+                },
+                "required": ["operation"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_chat_files",
+            "description": "Search the files and documents attached to THIS chat for passages about a question. Use when the user asks about an attached file that was too long to read in full (it says truncated or omitted), or to find where a long document mentions something. Returns the best passages with the document id and character offset.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "What to look for, in the document's own words where possible"},
+                    "k": {"type": "integer", "description": "How many passages (1-8, default 5)"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_documents",
+            "description": "Manage documents: list all documents (with optional search/language filter), read one (page through long ones with offset), delete documents, or run tidy cleanup.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["list", "read", "delete", "tidy"]},
+                    "document_id": {"type": "string", "description": "Document ID (for read and delete)"},
                     "search": {"type": "string", "description": "Search query (for list)"},
                     "language": {"type": "string", "description": "Filter by language (for list)"},
-                    "limit": {"type": "integer", "description": "Max results (for list, default 50)"}
+                    "limit": {"type": "integer", "description": "Max results (for list, default 50) or characters (for read)"},
+                    "offset": {"type": "integer", "description": "Character position to start reading from (for read; use next_offset from the previous read)"}
                 },
                 "required": ["action"]
             }
@@ -1015,7 +1074,7 @@ FUNCTION_TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "app_api",
-            "description": "Generic loopback to allowed internal Odysseus endpoints. Use this when there's no named tool for what the user wants. Hits the same routes the UI buttons hit (cookbook, gallery, library/documents, memory, notes, calendar, tasks, settings, themes, research, compare, etc.). action='endpoints' returns the OpenAPI surface (use `filter` to narrow). action='call' (default) takes method+path+body. Sensitive auth/user/admin/shell paths and host-control Cookbook mutation routes are blocked for safety. Do not use for shell commands; use named command tooling instead. Do not use for package installs, engine rebuilds, PID signalling, or email account discovery; use list_email_accounts for email accounts because /api/email/accounts is owner-filtered in tool context.",
+            "description": "Generic loopback to allowed internal Maven endpoints. Use this when there's no named tool for what the user wants. Hits the same routes the UI buttons hit (cookbook, gallery, library/documents, memory, notes, calendar, tasks, settings, themes, research, compare, etc.). action='endpoints' returns the OpenAPI surface (use `filter` to narrow). action='call' (default) takes method+path+body. Sensitive auth/user/admin/shell paths and host-control Cookbook mutation routes are blocked for safety. Do not use for shell commands; use named command tooling instead. Do not use for package installs, engine rebuilds, PID signalling, or email account discovery; use list_email_accounts for email accounts because /api/email/accounts is owner-filtered in tool context.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1585,7 +1644,7 @@ def function_call_to_tool_block(name: str, arguments: str) -> Optional[ToolBlock
             content = action
     elif tool_type in ("manage_tasks", "manage_skills", "api_call",
                         "manage_endpoints", "manage_mcp", "manage_webhooks",
-                        "manage_tokens", "manage_documents", "manage_settings"):
+                        "manage_tokens", "manage_documents", "manage_settings", "search_chat_files", "analyze_data"):
         content = json.dumps(args)
     elif tool_type == "ask_teacher":
         content = args.get("model", "auto") + "\n" + args.get("problem", "")

@@ -11,6 +11,9 @@ RUN bash /usr/local/bin/build-realesrgan-wheels.sh /wheels
 
 FROM python:3.14-slim
 
+LABEL org.opencontainers.image.title="Maven"
+LABEL org.opencontainers.image.description="Maven, a self-hosted AI workspace (based on Odysseus)"
+
 # System deps. tmux is required by Cookbook for background downloads/serves.
 # openssh-client is required for Cookbook remote server tests, setup, probes,
 # downloads, and serves from Docker installs.

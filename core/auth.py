@@ -47,6 +47,8 @@ ADMIN_PRIVILEGES["allowed_models_restricted"] = False
 # backwards for this sentinel.
 ADMIN_PRIVILEGES["block_all_models"] = False
 
+from src import access
+from src.brand import BRAND_NAME
 from src.constants import AUTH_FILE, PASSWORD_MIN_LENGTH
 from src.owner_identity import RESERVED_AUTH_USERNAMES
 DEFAULT_AUTH_PATH = AUTH_FILE
@@ -87,6 +89,23 @@ class SetAdminResult(enum.Enum):
     LAST_ADMIN = "last_admin"           # would remove the last remaining admin
 
 
+def _monitoring_notice() -> str:
+    try:
+        from src.flagging import monitoring_notice
+        return monitoring_notice()
+    except Exception:
+        return ""
+
+
+class AccessChangeResult(enum.Enum):
+    """Outcome of AuthManager.set_roles / set_clearance."""
+    OK = "ok"
+    USER_NOT_FOUND = "user_not_found"
+    NOT_AUTHORIZED = "not_authorized"   # requester is not an admin
+    LAST_ADMIN = "last_admin"           # would remove the last remaining admin
+    INVALID = "invalid"                 # unknown role or clearance value
+
+
 class AuthManager:
     """Manages multi-user password + session-token auth system."""
 
@@ -105,6 +124,11 @@ class AuthManager:
         # Guards the first-run setup check-and-write so concurrent requests
         # cannot both observe is_configured==False and both create admin accounts.
         self._setup_lock = threading.Lock()
+        # auth.json can change under a running server (scripts/maven-users
+        # reset-password / make-admin). Remember what we loaded or wrote so
+        # an outside change is picked up on the next login check.
+        self._auth_mtime: Optional[int] = None
+        self._auth_checked_at = 0.0
         self._load()
         self._load_sessions()
         self._migrate_single_user()
@@ -126,6 +150,7 @@ class AuthManager:
                         for k, v in self._config["users"].items()
                     }
                 logger.info("Auth config loaded")
+                self._auth_mtime = os.stat(self.auth_path).st_mtime_ns
             else:
                 self._config = {}
                 logger.info("No auth config found — first-run setup required")
@@ -220,6 +245,36 @@ class AuthManager:
 
     def _save(self):
         _atomic_write_json(self.auth_path, self._config, indent=2)
+        try:
+            self._auth_mtime = os.stat(self.auth_path).st_mtime_ns
+        except OSError:
+            pass
+
+    def _reload_if_changed(self) -> None:
+        """Pick up auth.json edits made outside this process (at most once a second).
+
+        Call only from entry points that do not hold _config_lock.
+        """
+        now = time.time()
+        if now - self._auth_checked_at < 1.0:
+            return
+        self._auth_checked_at = now
+        try:
+            mtime = os.stat(self.auth_path).st_mtime_ns
+        except OSError:
+            return
+        if mtime == self._auth_mtime:
+            return
+        with self._config_lock:
+            self._load()
+        logger.info("auth.json changed on disk; reloaded accounts")
+
+    def _session_revoked(self, session: Dict[str, Any]) -> bool:
+        """True when the user's sessions were revoked after this one began
+        (e.g. a command-line password reset in another process)."""
+        user = self.users.get(session.get("username")) or {}
+        cutoff = user.get("sessions_valid_after")
+        return bool(cutoff) and float(session.get("created") or 0) < float(cutoff)
 
     @property
     def users(self) -> Dict[str, Any]:
@@ -246,6 +301,7 @@ class AuthManager:
             "reserved_usernames": sorted(RESERVED_USERNAMES),
             "signup_enabled": self.signup_enabled,
             "session_days": TOKEN_TTL // 86400,
+            "monitoring_notice": _monitoring_notice(),
         }
 
     # ------------------------------------------------------------------
@@ -371,9 +427,90 @@ class AuthManager:
 
     def list_users(self) -> List[Dict[str, Any]]:
         return [
-            {"username": u, "is_admin": d.get("is_admin", False), "privileges": self.get_privileges(u)}
+            {"username": u, "is_admin": d.get("is_admin", False), "privileges": self.get_privileges(u),
+             **self.access_summary(u)}
             for u, d in self.users.items()
         ]
+
+    # ------------------------------------------------------------------
+    # Roles and clearance (src/access.py). is_admin stays the source of
+    # truth for the Admin role; the other roles live in "roles".
+    # ------------------------------------------------------------------
+
+    def get_roles(self, username: str) -> List[str]:
+        user = self.users.get(username) or {}
+        return access.effective_roles(user.get("roles"), bool(user.get("is_admin")))
+
+    def has_capability(self, username: str, capability: str) -> bool:
+        if username not in self.users:
+            return False
+        return capability in access.capabilities_for(self.get_roles(username))
+
+    def access_summary(self, username: str) -> Dict[str, Any]:
+        """Roles, capabilities and clearance for one user (no secrets)."""
+        user = self.users.get(username) or {}
+        roles = self.get_roles(username)
+        override = user.get("clearance")
+        override = override if access.is_valid_clearance(override) else None
+        return {
+            "roles": roles,
+            "capabilities": access.capabilities_for(roles),
+            "clearance": access.effective_clearance(roles, override),
+            "clearance_override": override,
+            "clearance_default": access.default_clearance(roles),
+        }
+
+    def set_roles(self, username: str, roles: List[str],
+                  requesting_user: str) -> AccessChangeResult:
+        """Replace a user's roles. Admin only.
+
+        Granting or removing Admin goes through the same last-admin guard and
+        privilege stash as set_admin, inside the same critical section, so a
+        refused change leaves the stored roles untouched.
+        """
+        username = (username or "").strip().lower()
+        requesting_user = (requesting_user or "").strip().lower()
+        if not isinstance(roles, list) or access.invalid_roles(roles):
+            return AccessChangeResult.INVALID
+        wanted = access.normalize_roles(roles)
+        want_admin = access.ADMIN in wanted
+        stored = [r for r in wanted if r not in (access.ADMIN, access.BASIC)]
+        with self._config_lock:
+            target = self._config.get("users", {}).get(username)
+            if target is None:
+                return AccessChangeResult.USER_NOT_FOUND
+            if not self.users.get(requesting_user, {}).get("is_admin"):
+                return AccessChangeResult.NOT_AUTHORIZED
+            if self._check_admin_change_locked(target, want_admin) is SetAdminResult.LAST_ADMIN:
+                return AccessChangeResult.LAST_ADMIN
+            self._apply_admin_flag_locked(target, want_admin)
+            target["roles"] = stored
+            self._save()
+        logger.info("Set roles for '%s' to %s (by '%s')",
+                    username, self.get_roles(username), requesting_user)
+        return AccessChangeResult.OK
+
+    def set_clearance(self, username: str, clearance: Optional[str],
+                      requesting_user: str) -> AccessChangeResult:
+        """Set a clearance override, or None to use the roles' default. Admin only."""
+        username = (username or "").strip().lower()
+        requesting_user = (requesting_user or "").strip().lower()
+        if clearance is not None and not access.is_valid_clearance(clearance):
+            return AccessChangeResult.INVALID
+        with self._config_lock:
+            target = self._config.get("users", {}).get(username)
+            if target is None:
+                return AccessChangeResult.USER_NOT_FOUND
+            if not self.users.get(requesting_user, {}).get("is_admin"):
+                return AccessChangeResult.NOT_AUTHORIZED
+            if clearance is None:
+                target.pop("clearance", None)
+            else:
+                target["clearance"] = clearance
+            self._save()
+        logger.info("Set clearance override for '%s' to %s (by '%s')",
+                    username, clearance, requesting_user)
+        return AccessChangeResult.OK
 
     def get_privileges(self, username: str) -> Dict[str, Any]:
         """Get privileges for a user. Admins get all privileges."""
@@ -429,41 +566,52 @@ class AuthManager:
                 return SetAdminResult.USER_NOT_FOUND
             if not self.users.get(requesting_user, {}).get("is_admin"):
                 return SetAdminResult.NOT_AUTHORIZED
-            currently_admin = bool(target.get("is_admin"))
-            if currently_admin == is_admin:
-                return SetAdminResult.OK  # no-op; leave privileges untouched
-            if currently_admin and not is_admin:
-                admin_count = sum(1 for d in self.users.values() if d.get("is_admin"))
-                if admin_count <= 1:
-                    return SetAdminResult.LAST_ADMIN
-            # Write order matters for lock-free readers: get_privileges()
-            # reads without _config_lock and trusts is_admin, so the admin
-            # flag must be flipped while the stored map is safe to expose —
-            # before writing admin privileges on promote, after restoring
-            # the pre-admin map on demote.
-            if is_admin:
-                target["is_admin"] = True
-                # Stash the pre-admin map so a later demotion can restore it.
-                # While is_admin is set the stored map is inert: get_privileges
-                # short-circuits to ADMIN_PRIVILEGES and set_privileges refuses
-                # admins, so only set_admin ever touches the stash.
-                target["privileges_before_admin"] = dict(
-                    target.get("privileges") or DEFAULT_PRIVILEGES
-                )
-                target["privileges"] = dict(ADMIN_PRIVILEGES)
-            else:
-                # Restore the stashed pre-admin map. Fall back to defaults for
-                # users created as admins (their stored map is ADMIN_PRIVILEGES,
-                # which must not leak past demotion — e.g. can_use_bash) and
-                # for admins promoted before the stash existed.
-                target["privileges"] = dict(
-                    target.pop("privileges_before_admin", None)
-                    or DEFAULT_PRIVILEGES
-                )
-                target["is_admin"] = False
+            result = self._check_admin_change_locked(target, is_admin)
+            if result is not SetAdminResult.OK or bool(target.get("is_admin")) == is_admin:
+                return result  # refused, or a no-op that leaves privileges untouched
+            self._apply_admin_flag_locked(target, is_admin)
             self._save()
         logger.info("Set is_admin=%s for '%s' (by '%s')", is_admin, username, requesting_user)
         return SetAdminResult.OK
+
+    def _check_admin_change_locked(self, target: Dict[str, Any], is_admin: bool) -> "SetAdminResult":
+        """Refuse removing the last admin. Caller holds _config_lock."""
+        if bool(target.get("is_admin")) and not is_admin:
+            admin_count = sum(1 for d in self.users.values() if d.get("is_admin"))
+            if admin_count <= 1:
+                return SetAdminResult.LAST_ADMIN
+        return SetAdminResult.OK
+
+    def _apply_admin_flag_locked(self, target: Dict[str, Any], is_admin: bool) -> None:
+        """Flip is_admin and swap the privilege map. Caller holds _config_lock,
+        has checked _check_admin_change_locked, and saves afterwards."""
+        if bool(target.get("is_admin")) == is_admin:
+            return
+        # Write order matters for lock-free readers: get_privileges()
+        # reads without _config_lock and trusts is_admin, so the admin
+        # flag must be flipped while the stored map is safe to expose —
+        # before writing admin privileges on promote, after restoring
+        # the pre-admin map on demote.
+        if is_admin:
+            target["is_admin"] = True
+            # Stash the pre-admin map so a later demotion can restore it.
+            # While is_admin is set the stored map is inert: get_privileges
+            # short-circuits to ADMIN_PRIVILEGES and set_privileges refuses
+            # admins, so only set_admin ever touches the stash.
+            target["privileges_before_admin"] = dict(
+                target.get("privileges") or DEFAULT_PRIVILEGES
+            )
+            target["privileges"] = dict(ADMIN_PRIVILEGES)
+        else:
+            # Restore the stashed pre-admin map. Fall back to defaults for
+            # users created as admins (their stored map is ADMIN_PRIVILEGES,
+            # which must not leak past demotion — e.g. can_use_bash) and
+            # for admins promoted before the stash existed.
+            target["privileges"] = dict(
+                target.pop("privileges_before_admin", None)
+                or DEFAULT_PRIVILEGES
+            )
+            target["is_admin"] = False
 
     def change_password(self, username: str, current_password: str, new_password: str) -> bool:
         username = username.strip().lower()
@@ -499,7 +647,7 @@ class AuthManager:
     def totp_get_provisioning_uri(self, username: str, secret: str) -> str:
         """Get the otpauth:// URI for QR code generation."""
         totp = pyotp.TOTP(secret)
-        return totp.provisioning_uri(name=username, issuer_name="Odysseus")
+        return totp.provisioning_uri(name=username, issuer_name=BRAND_NAME)
 
     def totp_confirm_enable(self, username: str, code: str) -> bool:
         """Verify a TOTP code against the pending secret, then enable 2FA."""
@@ -567,9 +715,69 @@ class AuthManager:
 
     def verify_password(self, username: str, password: str) -> bool:
         username = username.strip().lower()
+        self._reload_if_changed()
         if username not in self.users:
             return False
-        return _verify_password(password, self.users[username]["password_hash"])
+        stored = (self.users[username] or {}).get("password_hash")
+        try:
+            return _verify_password(password, stored)
+        except (AttributeError, TypeError, ValueError):
+            # A missing or non-bcrypt hash (hand-edited or damaged auth.json)
+            # used to raise here and turn every login into a 500. Fail closed
+            # and say how to recover; never log the stored value.
+            logger.error(
+                "Account '%s' has no valid password hash in %s; login refused. "
+                "Reset it with: python scripts/maven-users reset-password %s",
+                username, self.auth_path, username,
+            )
+            return False
+
+    def account_problems(self) -> List[Dict[str, str]]:
+        """Users whose stored record cannot be logged into (for maven-users check)."""
+        problems = []
+        for username, user in self.users.items():
+            stored = (user or {}).get("password_hash") if isinstance(user, dict) else None
+            ok = isinstance(stored, str) and stored.startswith(("$2a$", "$2b$", "$2y$"))
+            if not ok:
+                problems.append({"username": username, "problem": "missing or invalid password hash"})
+        return problems
+
+    def grant_admin_local(self, username: str) -> bool:
+        """Make a user an admin without a requesting admin.
+
+        Server-side recovery only (scripts/maven-users), for an install left
+        with no working admin. No HTTP route reaches this.
+        """
+        username = (username or "").strip().lower()
+        with self._config_lock:
+            target = self._config.get("users", {}).get(username)
+            if target is None:
+                return False
+            self._apply_admin_flag_locked(target, True)
+            self._save()
+        logger.info("Admin granted to '%s' from the server command line", username)
+        return True
+
+    def reset_password(self, username: str, new_password: str) -> bool:
+        """Set a new password without the old one and sign the user out everywhere.
+
+        Server-side recovery only (scripts/maven-users): there is no HTTP
+        route to this, because it skips the current-password check.
+        """
+        username = (username or "").strip().lower()
+        if len(new_password or "") < PASSWORD_MIN_LENGTH:
+            return False
+        with self._config_lock:
+            if username not in self.users:
+                return False
+            self._config["users"][username]["password_hash"] = _hash_password(new_password)
+            # A server running in another process keeps its own copy of the
+            # sessions; this marker makes it drop them too.
+            self._config["users"][username]["sessions_valid_after"] = time.time()
+            self._save()
+        self.revoke_user_sessions(username)
+        logger.info("Password reset for '%s' from the server command line", username)
+        return True
 
     def create_session(self, username: str, password: str) -> Optional[str]:
         """Verify credentials and return a session token, or None."""
@@ -591,6 +799,7 @@ class AuthManager:
                 self._sessions[token] = {
                     "username": username,
                     "expiry": time.time() + TOKEN_TTL,
+                    "created": time.time(),
                 }
         self._save_sessions()
         return token
@@ -598,6 +807,7 @@ class AuthManager:
     def validate_token(self, token: Optional[str]) -> bool:
         if not token:
             return False
+        self._reload_if_changed()
         expired = False
         deleted_user = False
         with self._sessions_lock:
@@ -612,7 +822,7 @@ class AuthManager:
                 # deleted them while their cookie was still valid), drop the
                 # session so the next request kicks them out instead of
                 # silently authenticating against a non-existent account.
-                if session.get("username") not in self.users:
+                if session.get("username") not in self.users or self._session_revoked(session):
                     self._sessions.pop(token, None)
                     deleted_user = True
         if expired or deleted_user:
@@ -624,6 +834,7 @@ class AuthManager:
         """Return the username associated with a valid token."""
         if not token:
             return None
+        self._reload_if_changed()
         expired = False
         deleted_user = False
         with self._sessions_lock:
@@ -636,7 +847,7 @@ class AuthManager:
             else:
                 _u = session["username"]
                 # SECURITY: orphan check — same rationale as validate_token.
-                if _u not in self.users:
+                if _u not in self.users or self._session_revoked(session):
                     self._sessions.pop(token, None)
                     deleted_user = True
                 else:

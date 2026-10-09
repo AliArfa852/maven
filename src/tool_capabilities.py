@@ -22,6 +22,10 @@ class ToolEffect(str, Enum):
     READ_PUBLIC = "read_public"
     READ_WORKSPACE = "read_workspace"
     READ_PRIVATE = "read_private"
+    # Content the user already shared in THIS chat (its attachments and the
+    # documents made from them). Not gated after external context: it is the
+    # conversation's own material, and egress tools stay gated.
+    READ_SESSION = "read_session"
     WRITE_WORKSPACE = "write_workspace"
     WRITE_PRIVATE = "write_private"
     EXECUTE_CODE = "execute_code"
@@ -94,6 +98,12 @@ _register(
     result_integrity=ResultIntegrity.EXTERNAL_UNTRUSTED,
 )
 _register(
+    {"analyze_data", "search_chat_files"},
+    ToolEffect.READ_SESSION,
+    # Cell and document text can carry injected instructions.
+    result_integrity=ResultIntegrity.EXTERNAL_UNTRUSTED,
+)
+_register(
     {"get_workspace", "glob", "grep", "ls", "read_file"},
     ToolEffect.READ_WORKSPACE,
     result_integrity=ResultIntegrity.WORKSPACE_UNTRUSTED,
@@ -141,6 +151,7 @@ _register(
 _register(
     {
         "create_document",
+        "create_file",
         "manage_calendar",
         "manage_contact",
         "manage_documents",

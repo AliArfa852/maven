@@ -23,6 +23,7 @@ from src.llm_core import (
     _normalize_http_status,
     _normalize_usage_counts,
 )
+from src.brand import BRAND_NAME
 from src.model_context import estimate_tokens
 from src.context_compactor import (
     apply_compaction_state,
@@ -387,7 +388,7 @@ _API_AGENT_RULES = """\
 - Plain "list/show/check my inbox/emails" means latest inbox mail, including read messages. Do not set `unread_only: true` unless the user explicitly asks for unread/needs attention.
 - Multiple email accounts: if tool output says "Other accounts" or the user asks "my Gmail?", "other inbox?", "work mail?", "custom domain mail?", or names any mailbox/account, DO NOT answer from memory or infer it is the same inbox. Call `list_email_accounts` if needed, then call `list_emails`/`read_email`/`bulk_email` with the exact `account` value for that mailbox. Account names are user-defined labels; if the user typo-matches a known account, use the closest listed account instead of claiming it does not exist. NEVER use `app_api` or `/api/email/accounts` to discover email accounts; that route is owner-filtered in tool context and can falsely return empty.
 - User identity facts/preferences ("my name is <name>", "I live in <place>", "I prefer concise replies", "call me <name>") → use `manage_memory` with action=add. NEVER use `manage_contact` for facts about the user unless the user explicitly says to create/update a contact and provides contact details such as an email or phone.
-- You are running INSIDE Odysseus — there is no OpenWebUI, ChatGPT, or external chat backend to query. All chats/sessions live in THIS app and are accessed via `list_sessions` (or `manage_session` with `action=list`), and deleted via `manage_session` with `action=delete`. Do NOT shell out to find sqlite files, curl localhost:8080, or grep for routers — those don't exist here. If `list_sessions` returns rows, that IS the source of truth.
+- You are running INSIDE """ + BRAND_NAME + """ — there is no OpenWebUI, ChatGPT, or external chat backend to query. All chats/sessions live in THIS app and are accessed via `list_sessions` (or `manage_session` with `action=list`), and deleted via `manage_session` with `action=delete`. Do NOT shell out to find sqlite files, curl localhost:8080, or grep for routers — those don't exist here. If `list_sessions` returns rows, that IS the source of truth.
 - After `list_sessions`, preserve the returned `[Chat title](#session-<id>)` links in your user-facing reply. Do not rewrite chat lists as plain tables with non-clickable titles.
 - "Cookbook" = the LLM-serving subsystem (NOT chat sessions, NOT a recipe app). Routing:
   • "What's running" / "what's serving" / "show my cookbook" / "is anything up" → **first action MUST be `list_served_models` (no args)**. The tool is ALWAYS available. Do not run `ps aux`, do not `curl localhost:8000`, do not `which vllm`. Even if you don't remember seeing the tool listed, it IS available — call it. The output IS the source of truth (it tracks diffusion models, vLLM, SGLang, llama.cpp, Ollama, etc. — anything spawned via the cookbook, including remote hosts that `ps aux` here can't see).
@@ -502,7 +503,7 @@ _DOMAIN_RULES = {
 - Tool toggles like "turn off shell/search/research" use `ui_control toggle <name> <on|off>`, not memory.""",
     "sessions": """\
 ## Chat/session rules
-- Odysseus chats are sessions. Use `list_sessions`/`manage_session`; do not shell out looking for chat files.
+- """ + BRAND_NAME + """ chats are sessions. Use `list_sessions`/`manage_session`; do not shell out looking for chat files.
 - Preserve clickable session links from tool output in your final answer.""",
     "files": """\
 ## File rules
@@ -527,7 +528,7 @@ _DOMAIN_RULES = {
 
 _DOMAIN_TOOL_MAP = {
     "web": set(WEB_TOOL_NAMES),
-    "documents": {"create_document", "edit_document", "update_document", "suggest_document", "manage_documents"},
+    "documents": {"create_document", "edit_document", "update_document", "suggest_document", "manage_documents", "create_file", "search_chat_files", "analyze_data"},
     "email": {"list_email_accounts", "list_emails", "read_email", "scan_email_unsubscribes", "unsubscribe_email", "send_email", "reply_to_email", "bulk_email", "archive_email", "delete_email", "mark_email_read", "resolve_contact", "manage_contact"},
     "cookbook": {"download_model", "serve_model", "serve_preset", "list_serve_presets", "list_served_models", "stop_served_model", "tail_serve_output", "list_downloads", "cancel_download", "search_hf_models", "list_cached_models", "list_cookbook_servers", "adopt_served_model"},
     "notes_calendar_tasks": {"manage_notes", "manage_calendar", "manage_tasks"},
@@ -569,7 +570,7 @@ For LONG-running commands (package installs, pip/npm, ffmpeg, model downloads, t
 #!bg
 pip install openai-whisper
 ```
-SANDBOX LIMITS: stdin/stdout are pipes, so there is NO interactive terminal — `input()`, `curses`, `termios`, `pygame`, and `tkinter` will all fail. Don't try to RUN interactive terminal games or GUI apps here — verify syntax (`python -c "import py_compile; py_compile.compile('x.py')"`) and tell the user to run it themselves in their own terminal. For anything the USER should play/use interactively (games, UIs, demos), prefer a single self-contained HTML file with `<canvas>` + inline JS — save it via `create_document` with language="html" and tell the user to hit the Run / Preview button (▶) in the document editor toolbar; it renders inline in a sandboxed iframe so the game is playable right there. Works from any machine that can reach the Odysseus UI — no need to copy files out.
+SANDBOX LIMITS: stdin/stdout are pipes, so there is NO interactive terminal — `input()`, `curses`, `termios`, `pygame`, and `tkinter` will all fail. Don't try to RUN interactive terminal games or GUI apps here — verify syntax (`python -c "import py_compile; py_compile.compile('x.py')"`) and tell the user to run it themselves in their own terminal. For anything the USER should play/use interactively (games, UIs, demos), prefer a single self-contained HTML file with `<canvas>` + inline JS — save it via `create_document` with language="html" and tell the user to hit the Run / Preview button (▶) in the document editor toolbar; it renders inline in a sandboxed iframe so the game is playable right there. Works from any machine that can reach the """ + BRAND_NAME + """ UI — no need to copy files out.
 NEVER pipe multi-line Python through `python -c "..."` — shell quoting eats real newlines and `\\n` arrives as literal backslash-n, which Python parses as a line-continuation error on line 1. To run multi-line code, either use the dedicated `python` tool block above, or save to a file first with a quoted HEREDOC (`cat > /tmp/x.py << 'EOF' ... EOF`) and then `python /tmp/x.py`.""",
 
     "python": """\
@@ -641,6 +642,24 @@ Maintain a structured task list for multi-step coding work. Use it when the task
 ```get_workspace
 ```
 Return the absolute path of the active workspace folder. File tools are CONFINED to it (paths can be RELATIVE to it); the shell starts there (cwd) but is NOT sandboxed. Call this first when the user says "the project"/"the code"/"this folder" without a path, instead of asking them. No arguments.""",
+
+    "create_file": """\
+```create_file
+{"format": "xlsx", "filename": "Q3 sales", "spec": {"sheets": [{"name": "Sales", "rows": [["Region", "Revenue"], ["North", 120]]}]}}
+```
+Create a downloadable Excel (xlsx), Word (docx), PowerPoint (pptx), PDF or CSV file and give the user its link. Use when the user asks for a file in one of those formats, not for editor documents. spec: spreadsheets/CSV use "sheets" (or "rows"; first row = header); docx/pdf use "title" + "blocks" ([{"type": "heading"|"paragraph"|"bullets"|"table", "text"/"items"/"rows"}]); pptx uses "slides" ([{"title", "bullets"} or {"title", "table"}]). Put only real data in it; never invent figures.""",
+
+    "analyze_data": """\
+```analyze_data
+{"operation": "group", "group_by": ["Region"], "aggregates": [{"column": "Revenue", "fn": "sum"}]}
+```
+Exact figures from an uploaded Excel/CSV file (file_id from the upload list; omit it to use the newest spreadsheet in this chat). Operations: describe (columns and stats; start here if you don't know the columns), group (group_by columns, "Date:month"/":quarter"/":year" buckets, aggregates sum|mean|count|min|max|median), top (sort_by, limit), rows (where filters). Filters: "where": [{"column": "Status", "op": "=", "value": "Paid"}]. ALWAYS use this for numbers from a spreadsheet instead of adding up the preview yourself; pass its table straight into create_file for charts.""",
+
+    "search_chat_files": """\
+```search_chat_files
+{"query": "termination notice period", "k": 5}
+```
+Search the files attached to THIS chat (and documents created from them) for the passages that answer a question. Use it when an attachment was marked truncated or omitted, or the user asks what a long document says about something; then answer from the passages and cite the document. Read further with manage_documents action=read, document_id, offset.""",
 
     "create_document": """\
 ```create_document
@@ -771,7 +790,7 @@ If the user asks for a reminder/alarm before the event, pass `reminder_minutes` 
 ```app_api
 {"action": "call", "method": "GET", "path": "/api/cookbook/gpus"}
 ```
-GENERIC LOOPBACK to allowed Odysseus internal endpoints. Use this whenever the user wants something the UI can do but there's NO named tool for it. Many UI buttons hit /api/* endpoints — you can hit allowed ones. Auth is handled automatically.
+GENERIC LOOPBACK to allowed """ + BRAND_NAME + """ internal endpoints. Use this whenever the user wants something the UI can do but there's NO named tool for it. Many UI buttons hit /api/* endpoints — you can hit allowed ones. Auth is handled automatically.
 
 **Discovery first.** If you're not sure of the path, call `{"action":"endpoints","filter":"<keyword>"}` (e.g. filter='calendar' or 'gallery' or 'theme') to list available endpoints with their methods + summaries. Then call with action='call'.
 
@@ -1128,6 +1147,22 @@ def _insert_before_latest_user(messages: List[Dict], context_msg: Dict) -> List[
     return out
 
 
+def _session_has_documents(session_id: str, owner: Optional[str]) -> bool:
+    """True when this chat has documents (e.g. full text of earlier attachments)."""
+    try:
+        from core.database import Document, SessionLocal
+
+        db = SessionLocal()
+        try:
+            q = db.query(Document.id).filter(Document.session_id == session_id, Document.archived.isnot(True))
+            q = q.filter(Document.owner.is_(None)) if owner is None else q.filter(Document.owner == owner)
+            return q.first() is not None
+        finally:
+            db.close()
+    except Exception:
+        return False
+
+
 def _uploaded_files_context_message(uploaded_files: Optional[List[Dict]]) -> Optional[Dict]:
     if not uploaded_files:
         return None
@@ -1218,7 +1253,7 @@ def _explicitly_references_missing_workspace(text: str, workspace: Optional[str]
 
 def _local_computer_rules() -> str:
     return (
-        "\n\n## Odysseus Terminus local-machine mode\n"
+        "\n\n## " + BRAND_NAME + " Terminus local-machine mode\n"
         "- The user referred to this computer/local machine or a named computer. Treat this as a machine-targeted agent task, not ordinary chat.\n"
         "- Configured Cookbook server names and SSH aliases are target machines. When the user names one, keep actions scoped to that machine.\n"
         "- For model-serving/download/cached-model tasks on a named machine, use Cookbook tools and pass the named host. Start with `list_cookbook_servers` if the exact configured host is unclear.\n"
@@ -1431,6 +1466,14 @@ def _classify_agent_request(messages: List[Dict], last_user: str) -> Dict[str, o
     )
     if has(r"\b(documents?|docs?|draft|compose|poem|story|essay|outline|letter|edit|rewrite|proofread|suggest|feedback|review this|make a file)\b"):
         domains.add("documents")
+    # File creation (create_file): office formats and the things people put in them.
+    if has(r"\b(excel|spreadsheets?|xlsx|csv|word doc(?:ument)?|docx|powerpoint|pptx|slides?|"
+           r"slide ?deck|deck|presentations?|pdfs?|reports?|charts?|graphs?)\b"):
+        domains.add("documents")
+    # Number questions about a spreadsheet (analyze_data).
+    if has(r"\b(analy[sz]e|analysis|totals?|sum of|averages?|breakdown|pivot|per (?:month|quarter|year|region)|"
+           r"by (?:month|quarter|year|region|customer|product)|revenue|sales|expenses?|spend(?:ing)?|invoices?)\b"):
+        domains.add("documents")
     if "notes_calendar_tasks" not in domains and has(r"\bwrite\b"):
         domains.add("documents")
     if has(r"\b(search|web|google|look up|latest|news|current|weather|forecast|stock price|price of|website|url|https?://|www\.)\b"):
@@ -1606,7 +1649,7 @@ def _minimal_saved_memory_message(messages: List[Dict]) -> Optional[Dict]:
     return untrusted_context_message(
         "saved memory: minimal context",
         (
-            "Saved user memory facts from Odysseus Brain. These are the same "
+            "Saved user memory facts from " + BRAND_NAME + " Brain. These are the same "
             "user facts available in the normal prompt path. Use them when "
             "the user asks for personalization, identity, background, "
             "preferences, or anything about \"me\" or \"my\":\n"
@@ -1713,7 +1756,7 @@ def _minimal_recent_notes_tool_context_message(messages: List[Dict]) -> Optional
     return untrusted_context_message(
         "recent tool context",
         (
-            "Recent Odysseus tool context for follow-up references only. "
+            "Recent " + BRAND_NAME + " tool context for follow-up references only. "
             "Use concrete note ids, calendar event uids, and email UIDs from "
             "here when the user says that note/event/reminder/appointment/"
             "email/first one/that one/it:\n"
@@ -1744,13 +1787,13 @@ def _compact_email_draft_context(raw: str, *, max_own_chars: int = 1200, max_his
     if len(own) > max_own_chars:
         own = own[:max_own_chars].rstrip() + "\n...[draft body truncated]"
     if len(history) > max_history_chars:
-        history = history[:max_history_chars].rstrip() + "\n...[quoted history truncated; full history is preserved by Odysseus]"
+        history = history[:max_history_chars].rstrip() + "\n...[quoted history truncated; full history is preserved by " + BRAND_NAME + "]"
     if history:
         body_out = (
             f"{own}\n\n" if own else ""
         ) + (
             "QUOTED HISTORY EXCERPT FOR CONTEXT ONLY -- do not rewrite or include this excerpt in your tool output; "
-            "Odysseus preserves the full quoted thread below the reply automatically.\n"
+            "" + BRAND_NAME + " preserves the full quoted thread below the reply automatically.\n"
             f"{history}"
         )
     else:
@@ -2346,7 +2389,7 @@ def _build_system_prompt(
                 f'This is the current email compose window, not a normal document library item. If the user says "write", "draft", "reply", "make it say", or "write the email" without naming another target, edit THIS email draft.\n\n'
                 f'When the user asks you to write, reply to, or improve this email:\n'
                 f'1. Use `update_document` to update this email draft — keep all header lines (To, Subject, In-Reply-To, References, X-Source-UID, X-Source-Folder, X-Attachments) and the `---` separator EXACTLY as they are.\n'
-                f'2. Replace ONLY the new reply text above `---------- Previous message ----------`. You may omit the quoted history from your tool output; Odysseus preserves everything from that separator downward automatically.\n'
+                f'2. Replace ONLY the new reply text above `---------- Previous message ----------`. You may omit the quoted history from your tool output; {BRAND_NAME} preserves everything from that separator downward automatically.\n'
                 f'3. Write the reply body above the quoted original. Use the saved email writing style when present.\n'
                 f'4. Identity is critical: write as the logged-in user / mailbox owner only. NEVER sign as the recipient, original sender, quoted sender, spouse, assistant, company, or any third party. If adding a signature, use only the name/signature implied by the saved email writing style.\n'
                 f'5. Mechanical style is critical: never use em dash/en dash; use --. Never use curly apostrophes. For English emails, use Hi/Hiya from the saved style rather than Hey unless the user explicitly asks for Hey.\n'
@@ -3988,7 +4031,7 @@ async def stream_agent_loop(
             and not active_email
         ):
             _relevant_tools = set(_WORKSPACE_TERMINUS_TOOLS)
-            logger.info("[tool-rag] Workspace file/terminal request; using Odysseus Terminus toolset")
+            logger.info("[tool-rag] Workspace file/terminal request; using %s Terminus toolset", BRAND_NAME)
 
     # If this turn targets the open document, keep editing tools available
     # regardless of which selection path (RAG, keyword, caller-provided) ran.
@@ -4017,7 +4060,14 @@ async def stream_agent_loop(
         if _relevant_tools is None:
             from src.tool_index import ALWAYS_AVAILABLE
             _relevant_tools = set(ALWAYS_AVAILABLE)
-        _relevant_tools.update({"read_file", "grep", "ls", "manage_documents"})
+        _relevant_tools.update({"read_file", "grep", "ls", "manage_documents", "search_chat_files", "analyze_data"})
+    elif not guide_only and session_id and _session_has_documents(session_id, owner):
+        # Files attached in an earlier turn: their full text lives in this
+        # chat's documents, so keep the in-chat search within reach.
+        if _relevant_tools is None:
+            from src.tool_index import ALWAYS_AVAILABLE
+            _relevant_tools = set(ALWAYS_AVAILABLE)
+        _relevant_tools.update({"search_chat_files", "manage_documents", "analyze_data"})
 
     # Per-request forced tools are stronger than retrieval. Explicit search
     # settings make web tools visible even when tool RAG misses them;

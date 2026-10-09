@@ -5,6 +5,10 @@ import sys
 import asyncio
 import time
 
+from src.brand import BRAND_NAME, apply_env_aliases
+
+apply_env_aliases()
+
 # On Windows, asyncio.create_subprocess_exec/shell require the ProactorEventLoop.
 # When started via `python -m uvicorn` from a terminal, uvicorn sets this
 # automatically. But the VS Code debugger (and other non-uvicorn entrypoints)
@@ -67,6 +71,7 @@ from core.constants import (
     REQUEST_TIMEOUT, OPENAI_API_KEY, AUTH_FILE,
 )
 from core.database import SessionLocal, ApiToken
+from src.brand import maven_env
 from core.middleware import (
     SecurityHeadersMiddleware,
     get_application_route_path,
@@ -126,7 +131,7 @@ logger = logging.getLogger(__name__)
 # and passed to FastAPI so we can use the modern context-manager lifecycle
 # instead of the deprecated @app.on_event("startup"/"shutdown") decorators.
 app = FastAPI(
-    title="AI Chat Application",
+    title=BRAND_NAME,
     description="Comprehensive AI chat with memory, research, and multi-modal capabilities",
     version="1.0.0",
 )
@@ -233,7 +238,7 @@ class _SlowRequestLogMiddleware(_BaseHTTPMiddleware):
         finally:
             elapsed = time.perf_counter() - start
             try:
-                threshold = float(os.getenv("ODYSSEUS_SLOW_REQUEST_LOG_SECONDS", "0.75") or "0.75")
+                threshold = float(maven_env("MAVEN_AI_SLOW_REQUEST_LOG_SECONDS", "0.75") or "0.75")
             except Exception:
                 threshold = 0.75
             if elapsed >= threshold:
@@ -246,9 +251,36 @@ class _SlowRequestLogMiddleware(_BaseHTTPMiddleware):
                 )
 
 
+class _AuditMiddleware(_BaseHTTPMiddleware):
+    """Record security-relevant requests in the audit log (src/audit.py).
+
+    Added before AuthMiddleware, so it runs inside it and sees the user.
+    """
+
+    async def dispatch(self, request, call_next):
+        from src import audit
+
+        path = get_application_route_path(request.scope)
+        if not audit.should_audit(request.method, path):
+            return await call_next(request)
+        status = 500
+        try:
+            response = await call_next(request)
+            status = getattr(response, "status_code", 0) or 0
+            return response
+        finally:
+            outcome = "ok" if status < 400 else "denied" if status in (401, 403) else "failed"
+            await asyncio.to_thread(
+                audit.record, f"http.{request.method}",
+                actor=getattr(request.state, "current_user", None), target=path,
+                outcome=outcome, ip=audit.client_ip(request), detail={"status": status},
+            )
+
+
 app.add_middleware(_RequestTimeoutMiddleware)
 app.add_middleware(_InteractiveActivityMiddleware)
 app.add_middleware(_SlowRequestLogMiddleware)
+app.add_middleware(_AuditMiddleware)
 
 # ========= AUTH =========
 from routes.auth_routes import setup_auth_routes, SESSION_COOKIE
@@ -256,6 +288,23 @@ from routes.auth_routes import setup_auth_routes, SESSION_COOKIE
 auth_manager = AuthManager()
 app.state.auth_manager = auth_manager
 AUTH_ENABLED = not auth_disabled()
+if AUTH_ENABLED:
+    # Say how to get in: a fresh install has no password to look up, and an
+    # existing one only printed its temporary password once, at setup.
+    if not auth_manager.is_configured:
+        logger.warning("No accounts yet: open /login in the browser to create the admin account.")
+    else:
+        logger.info(
+            "Login: use your admin account. Forgot the password? Run "
+            "`python scripts/maven-users reset-password <username> --generate` on this server."
+        )
+from src.runtime_paths import is_inside_onedrive as _is_inside_onedrive
+if os.name == "nt" and _is_inside_onedrive(DATA_DIR):
+    logger.warning(
+        "The data folder %s is inside OneDrive. Syncing a live database can corrupt it; "
+        "move the app out of OneDrive or set MAVEN_AI_DATA_DIR to a local folder.",
+        DATA_DIR,
+    )
 LOCALHOST_BYPASS = os.getenv("LOCALHOST_BYPASS", "false").lower() == "true"
 if LOCALHOST_BYPASS:
     logger.warning("LOCALHOST_BYPASS is enabled, loopback requests bypass authentication. Do not expose this instance to a network.")
@@ -267,12 +316,17 @@ if AUTH_ENABLED:
         "/api/auth/login",
         "/api/auth/logout",
         "/api/auth/status",
-        "/api/auth/features",
-        "/api/auth/settings",
+        "/api/auth/policy",  # password rules + monitoring notice the login page shows
         "/api/auth/integrations/presets",
         "/api/health",
         "/api/version",
         "/login",
+    }
+    # Readable before login (the login page and keybinds use them); writing
+    # them still needs a session here and Admin in the handler.
+    AUTH_EXEMPT_READ_ONLY = {
+        "/api/auth/features",
+        "/api/auth/settings",
     }
     AUTH_EXEMPT_PREFIXES = ["/static"]
     # Dynamic paths whose own handler proves identity via a path-embedded
@@ -288,8 +342,10 @@ if AUTH_ENABLED:
         _re.compile(r"^/api/tasks/[^/]+/webhook/[^/]+/?$"),
     ]
 
-    def _is_auth_exempt(path: str) -> bool:
+    def _is_auth_exempt(path: str, method: str = "GET") -> bool:
         if path in AUTH_EXEMPT_EXACT:
+            return True
+        if path in AUTH_EXEMPT_READ_ONLY and method.upper() in ("GET", "HEAD"):
             return True
         if any(path_is_route_or_child(path, p) for p in AUTH_EXEMPT_PREFIXES):
             return True
@@ -373,7 +429,7 @@ if AUTH_ENABLED:
             # header; never a credentialed request).
             if is_cors_preflight(request.method, request.headers):
                 return await call_next(request)
-            if _is_auth_exempt(path):
+            if _is_auth_exempt(path, request.method):
                 return await call_next(request)
             # In-process internal-tool token bypass. Used by the agent
             # tool layer when it HTTP-loopbacks to admin-gated routes
@@ -687,6 +743,16 @@ app.include_router(setup_session_routes(
     upload_handler=upload_handler,
 ))
 
+# Office file creation: xlsx / docx / pptx / pdf / csv into the caller's uploads
+from routes.file_routes import setup_file_routes
+app.include_router(setup_file_routes())
+
+# Flagged-conversation review (Compliance Officers; Admin console)
+from routes.compliance_routes import setup_compliance_routes
+app.include_router(setup_compliance_routes())
+from routes.audit_routes import setup_audit_routes
+app.include_router(setup_audit_routes())
+
 # Admin Danger Zone wipes (Settings → System → Danger Zone)
 from routes.admin_wipe.admin_wipe_routes import setup_admin_wipe_routes
 app.include_router(setup_admin_wipe_routes(session_manager))
@@ -937,6 +1003,12 @@ async def serve_tasks(request: Request):
 async def serve_library(request: Request):
     return await serve_index(request)
 
+@app.get("/admin-console")
+async def serve_admin_console(request: Request):
+    """Admin console page. Login is enforced by the auth middleware; what each
+    user may see or change is enforced per API call (src/access.py)."""
+    return serve_html_with_nonce(request, abs_join(BASE_DIR, "static/admin-console.html"))
+
 @app.get("/backgrounds")
 async def serve_backgrounds(request: Request):
     """Sandbox page for prototyping background effects. No auth required."""
@@ -1084,7 +1156,7 @@ async def _startup_event():
     # Startup warmups are opt-in. They make later requests a little warmer, but
     # they also compete with the first seconds of real UI use on slow or busy
     # machines. Default to clear/idle startup and let requests warm what they use.
-    _startup_warmups_enabled = str(os.getenv("ODYSSEUS_STARTUP_WARMUPS", "")).lower() in {"1", "true", "yes", "on"}
+    _startup_warmups_enabled = str(maven_env("MAVEN_AI_STARTUP_WARMUPS", "")).lower() in {"1", "true", "yes", "on"}
     if _startup_warmups_enabled:
         async def _warmup_tool_index():
             try:
@@ -1117,12 +1189,12 @@ async def _startup_event():
 
         _startup_tasks.append(asyncio.create_task(_warmup_endpoints()))
     else:
-        logger.info("Startup warmups disabled (set ODYSSEUS_STARTUP_WARMUPS=1 to enable)")
+        logger.info("Startup warmups disabled (set MAVEN_AI_STARTUP_WARMUPS=1 to enable)")
 
     # Keep-alive is opt-in. The ping path performs model discovery, and when
     # stale LAN endpoints are configured it can add periodic backend pressure
     # that delays unrelated UI requests such as Notes/Documents.
-    _keepalive_enabled = str(os.getenv("ODYSSEUS_MODEL_KEEPALIVE", "")).lower() in {"1", "true", "yes", "on"}
+    _keepalive_enabled = str(maven_env("MAVEN_AI_MODEL_KEEPALIVE", "")).lower() in {"1", "true", "yes", "on"}
     if _keepalive_enabled:
         async def _keepalive_loop():
             while True:
@@ -1206,13 +1278,13 @@ async def _startup_event():
 
     # Start scheduled task runner — skip when running under a cron-driven
     # deployment where an external worker drives task firing. Mirrors
-    # `ODYSSEUS_INPROCESS_POLLERS` from the email pollers.
-    _tasks_inprocess = os.environ.get("ODYSSEUS_INPROCESS_TASKS", "1").strip().lower()
+    # `MAVEN_AI_INPROCESS_POLLERS` from the email pollers.
+    _tasks_inprocess = maven_env("MAVEN_AI_INPROCESS_TASKS", "1").strip().lower()
     if _tasks_inprocess not in ("0", "false", "no", "off", ""):
         await task_scheduler.start()
     else:
         logger.info(
-            "In-process task scheduler disabled (ODYSSEUS_INPROCESS_TASKS=0); "
+            "In-process task scheduler disabled (MAVEN_AI_INPROCESS_TASKS=0); "
             "drive task firing externally (e.g. cron)."
         )
     # Periodic null-owner sweep — re-runs the legacy-owner assignment hourly
@@ -1229,6 +1301,19 @@ async def _startup_event():
                 await asyncio.sleep(3600)
 
     _startup_tasks.append(asyncio.create_task(_null_owner_sweep_loop()))
+
+    # Daily: delete decided conversation flags past their retention period
+    # (MAVEN_AI_FLAG_RETENTION_DAYS, default 180; open flags are kept).
+    async def _flag_retention_loop():
+        from src.flagging import purge_decided_flags
+        while True:
+            try:
+                await asyncio.to_thread(purge_decided_flags)
+            except Exception as e:
+                logger.warning(f"Flag retention purge failed: {e}")
+            await asyncio.sleep(24 * 3600)
+
+    _startup_tasks.append(asyncio.create_task(_flag_retention_loop()))
 
     # Nightly skill audit — at ~02:00 local, test + judge a batch of the
     # least-recently-checked skills, auto-fixing/escalating weak ones (never

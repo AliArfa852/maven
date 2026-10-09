@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+"""maven-db — database info and the SQLite → PostgreSQL move (decision D-2-1).
+
+    maven-db info                         # which database the app uses, row counts
+    maven-db copy-to-postgres             # copy data/app.db into DATABASE_URL
+    maven-db copy-to-postgres --from PATH --to postgresql://maven:pw@host:5432/maven
+    maven-db load-export data/_db_export  # after maven-backup restore, into an empty DB
+
+copy-to-postgres creates the schema in the target, copies every table in
+dependency order, and resets PostgreSQL's id counters. It refuses a target that
+already holds data, and it never changes the SQLite file. Stop the app first so
+nothing writes to SQLite during the copy. Columns the target no longer has are
+skipped and reported (old installs may carry columns a later version dropped).
+"""
+
+from __future__ import annotations
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "_lib"))
+from cli import quiet_logs, emit, fail, common_parser, run, REPO_ROOT
+quiet_logs()
+
+from pathlib import Path
+
+BATCH = 500
+
+
+def _default_sqlite_path() -> Path:
+    from src.constants import DATA_DIR
+    return Path(DATA_DIR) / "app.db"
+
+
+def cmd_info(args):
+    from src.db_url import is_sqlite_url, with_installed_postgres_driver
+    from sqlalchemy import create_engine, inspect, text
+    url = os.environ.get("DATABASE_URL") or f"sqlite:///{_default_sqlite_path()}"
+    url = with_installed_postgres_driver(url)
+    engine = create_engine(url)
+    tables = {}
+    with engine.connect() as conn:
+        for name in sorted(inspect(conn).get_table_names()):
+            tables[name] = conn.execute(text(f'SELECT COUNT(*) FROM "{name}"')).scalar()
+    emit({"backend": "sqlite" if is_sqlite_url(url) else engine.dialect.name,
+          "url": engine.url.render_as_string(hide_password=True), "tables": tables}, args)
+    return 0
+
+
+def cmd_copy_to_postgres(args):
+    source_path = Path(args.source or _default_sqlite_path())
+    if not source_path.exists():
+        fail(f"SQLite database not found: {source_path}")
+    target_url = args.target or os.environ.get("DATABASE_URL", "")
+    from src.db_url import is_sqlite_url, with_installed_postgres_driver
+    if not target_url or is_sqlite_url(target_url):
+        fail("no PostgreSQL target: pass --to postgresql://... or set DATABASE_URL")
+    target_url = with_installed_postgres_driver(target_url)
+
+    # core.database builds the schema for whatever DATABASE_URL says when it is
+    # imported, so point it at the target before importing it.
+    os.environ["DATABASE_URL"] = target_url
+    from sqlalchemy import MetaData, create_engine, func, inspect, select, text
+    from core.database import Base, engine as target
+
+    source = create_engine(f"sqlite:///{source_path}")
+    src_meta = MetaData()
+    src_meta.reflect(bind=source)
+
+    tables = [t for t in Base.metadata.sorted_tables if t.name in src_meta.tables]
+    with target.connect() as conn:
+        busy = [t.name for t in tables
+                if conn.execute(select(func.count()).select_from(t)).scalar()]
+    if busy:
+        fail("target already holds data in: " + ", ".join(busy)
+             + ". Copy into an empty database.")
+
+    report = {"source": str(source_path),
+              "target": target.url.render_as_string(hide_password=True),
+              "tables": {}, "skipped_columns": {}}
+    with source.connect() as src, target.begin() as dst:
+        for table in tables:
+            src_table = src_meta.tables[table.name]
+            shared = [c.name for c in src_table.columns if c.name in table.columns]
+            dropped = [c.name for c in src_table.columns if c.name not in table.columns]
+            if dropped:
+                report["skipped_columns"][table.name] = dropped
+            count = 0
+            result = src.execute(select(*[src_table.c[n] for n in shared]))
+            while True:
+                rows = result.fetchmany(BATCH)
+                if not rows:
+                    break
+                dst.execute(table.insert(), [dict(zip(shared, r)) for r in rows])
+                count += len(rows)
+            report["tables"][table.name] = count
+
+        # Integer ids come from sequences in PostgreSQL; move each past the
+        # copied rows so new inserts don't collide.
+        from src.db_export import reset_sequences
+        reset_sequences(dst, tables)
+    emit(report, args)
+    return 0
+
+
+def cmd_load_export(args):
+    """Load a maven-backup database export (data/_db_export) into an empty database."""
+    from src.db_export import iter_rows, read_manifest, reset_sequences
+    in_dir = Path(args.path)
+    try:
+        manifest = read_manifest(in_dir)
+    except (FileNotFoundError, ValueError) as e:
+        fail(str(e))
+    target_url = args.target or os.environ.get("DATABASE_URL", "")
+    if not target_url:
+        fail("no target: pass --to URL or set DATABASE_URL")
+    from src.db_url import with_installed_postgres_driver
+    os.environ["DATABASE_URL"] = with_installed_postgres_driver(target_url)
+    from sqlalchemy import func, select
+    from core.database import Base, engine as target  # creates the schema
+
+    tables = [t for t in Base.metadata.sorted_tables if t.name in manifest["tables"]]
+    with target.connect() as conn:
+        busy = [t.name for t in tables
+                if conn.execute(select(func.count()).select_from(t)).scalar()]
+    if busy:
+        fail("target already holds data in: " + ", ".join(busy) + ". Load into an empty database.")
+    report = {"source": str(in_dir), "target": target.url.render_as_string(hide_password=True),
+              "tables": {}, "skipped_columns": {}}
+    with target.begin() as dst:
+        for table in tables:
+            count = 0
+            for batch in iter_rows(in_dir, table.name):
+                dropped = sorted({k for r in batch for k in r} - set(table.columns.keys()))
+                if dropped:
+                    report["skipped_columns"][table.name] = dropped
+                dst.execute(table.insert(), [{k: v for k, v in r.items() if k in table.columns}
+                                             for r in batch])
+                count += len(batch)
+            report["tables"][table.name] = count
+        reset_sequences(dst, tables)
+    if any(report["tables"].get(t, 0) != n for t, n in manifest["tables"].items()
+           if t in report["tables"]):
+        fail("row counts differ from the export manifest; the load may be incomplete")
+    emit(report, args)
+    return 0
+
+
+def build_parser():
+    p = common_parser("maven-db", "Database info and the SQLite to PostgreSQL move.")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    pi = sub.add_parser("info", parents=[p._common_parents[0]],
+                        help="show the database in use and row counts")
+    pi.set_defaults(func=cmd_info)
+    pc = sub.add_parser("copy-to-postgres", parents=[p._common_parents[0]],
+                        help="copy the SQLite database into an empty PostgreSQL one")
+    pc.add_argument("--from", dest="source", help="SQLite file (default: data/app.db)")
+    pc.add_argument("--to", dest="target", help="PostgreSQL URL (default: DATABASE_URL)")
+    pc.set_defaults(func=cmd_copy_to_postgres)
+    pl = sub.add_parser("load-export", parents=[p._common_parents[0]],
+                        help="load a maven-backup database export into an empty database")
+    pl.add_argument("path", help="the export folder, e.g. data/_db_export from a restored backup")
+    pl.add_argument("--to", dest="target", help="database URL (default: DATABASE_URL)")
+    pl.set_defaults(func=cmd_load_export)
+    return p
+
+
+if __name__ == "__main__":
+    sys.exit(run(build_parser()))

@@ -701,5 +701,6 @@ class VectorRAG:
     # Convenience
     # ------------------------------------------------------------------
 
-    def retrieve(self, query: str, k: int = 5) -> List[str]:
-        return [r['document'] for r in self.search(query, k)]
+    def retrieve(self, query: str, k: int = 5, owner: Optional[str] = None) -> List[str]:
+        """Plain-text results. Pass ``owner`` when auth is on; None searches everyone's."""
+        return [r['document'] for r in self.search(query, k, owner=owner)]
