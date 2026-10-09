@@ -317,12 +317,16 @@ if AUTH_ENABLED:
         "/api/auth/logout",
         "/api/auth/status",
         "/api/auth/policy",  # password rules + monitoring notice the login page shows
-        "/api/auth/features",
-        "/api/auth/settings",
         "/api/auth/integrations/presets",
         "/api/health",
         "/api/version",
         "/login",
+    }
+    # Readable before login (the login page and keybinds use them); writing
+    # them still needs a session here and Admin in the handler.
+    AUTH_EXEMPT_READ_ONLY = {
+        "/api/auth/features",
+        "/api/auth/settings",
     }
     AUTH_EXEMPT_PREFIXES = ["/static"]
     # Dynamic paths whose own handler proves identity via a path-embedded
@@ -338,8 +342,10 @@ if AUTH_ENABLED:
         _re.compile(r"^/api/tasks/[^/]+/webhook/[^/]+/?$"),
     ]
 
-    def _is_auth_exempt(path: str) -> bool:
+    def _is_auth_exempt(path: str, method: str = "GET") -> bool:
         if path in AUTH_EXEMPT_EXACT:
+            return True
+        if path in AUTH_EXEMPT_READ_ONLY and method.upper() in ("GET", "HEAD"):
             return True
         if any(path_is_route_or_child(path, p) for p in AUTH_EXEMPT_PREFIXES):
             return True
@@ -423,7 +429,7 @@ if AUTH_ENABLED:
             # header; never a credentialed request).
             if is_cors_preflight(request.method, request.headers):
                 return await call_next(request)
-            if _is_auth_exempt(path):
+            if _is_auth_exempt(path, request.method):
                 return await call_next(request)
             # In-process internal-tool token bypass. Used by the agent
             # tool layer when it HTTP-loopbacks to admin-gated routes
