@@ -2,7 +2,9 @@
 // (src/access.py). The server enforces every read and change; hiding a
 // control here is only presentation.
 
-const el = (id) => document.getElementById(id);
+import { api, el, node } from './admin-console-util.js';
+import { initModels } from './admin-console-models.js';
+import { initSettings } from './admin-console-settings.js';
 
 const CAPABILITY_TEXT = {
   'admin.manage': 'change everything',
@@ -14,21 +16,6 @@ const CAPABILITY_TEXT = {
 // role catalogue (admin.view only) has loaded.
 function roleLabel(id) {
   return String(id).split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-}
-
-function node(tag, text, className) {
-  const n = document.createElement(tag);
-  if (text != null) n.textContent = text;
-  if (className) n.className = className;
-  return n;
-}
-
-async function api(path, options = {}) {
-  const res = await fetch(path, { credentials: 'same-origin', ...options });
-  let body = null;
-  try { body = await res.json(); } catch { /* empty body */ }
-  if (!res.ok) throw new Error((body && body.detail) || `Request failed (${res.status})`);
-  return body;
 }
 
 function consoleAccess(caps) {
@@ -242,7 +229,6 @@ function renderSettings(data) {
 
 async function loadSettings() {
   renderSettings(await api('/api/compliance/settings'));
-  el('ac-flag-settings').hidden = false;
 }
 
 async function saveSettings() {
@@ -343,6 +329,121 @@ async function verifyAudit() {
   }
 }
 
+// ── Tabs ──
+
+const TABS = [
+  { id: 'overview', label: 'Overview', can: () => true },
+  { id: 'users', label: 'Users & roles', can: (c) => c.includes('admin.view') },
+  { id: 'models', label: 'Models & APIs', can: (c) => c.includes('admin.manage') },
+  { id: 'settings', label: 'Settings', can: (c) => c.includes('admin.manage') },
+  { id: 'compliance', label: 'Compliance', can: (c) => c.includes('compliance.review') },
+  { id: 'audit', label: 'Audit log', can: (c) => c.includes('admin.view') || c.includes('compliance.review') },
+];
+let allowedTabs = [];
+
+function showTab(id) {
+  if (!allowedTabs.some((t) => t.id === id)) id = 'overview';
+  for (const section of document.querySelectorAll('section[data-tab]')) {
+    section.hidden = section.dataset.tab !== id;
+  }
+  for (const b of el('ac-tabs').querySelectorAll('button')) {
+    b.setAttribute('aria-selected', String(b.dataset.tab === id));
+  }
+  try { history.replaceState(null, '', `#${id}`); } catch { /* file:// or sandbox */ }
+}
+
+function buildTabs(caps) {
+  allowedTabs = TABS.filter((t) => t.can(caps));
+  const nav = el('ac-tabs');
+  nav.replaceChildren();
+  for (const t of allowedTabs) {
+    const b = node('button', t.label);
+    b.type = 'button';
+    b.dataset.tab = t.id;
+    b.setAttribute('role', 'tab');
+    b.addEventListener('click', () => showTab(t.id));
+    nav.append(b);
+  }
+  nav.hidden = false;
+  showTab((location.hash || '').slice(1) || 'overview');
+}
+
+function tabBadge(id, n) {
+  const b = el('ac-tabs').querySelector(`button[data-tab="${id}"]`);
+  if (!b) return;
+  b.querySelector('.count')?.remove();
+  if (n) b.append(node('span', String(n), 'count'));
+}
+
+// ── Overview ──
+
+function card(title, big, sub, tab) {
+  const c = node('div', null, 'card');
+  c.append(node('div', title, 'sub'), node('div', big, 'big'));
+  if (sub) c.append(node('p', sub, 'sub'));
+  if (tab && allowedTabs.some((t) => t.id === tab)) {
+    const a = node('a', 'Open');
+    a.href = `#${tab}`;
+    a.addEventListener('click', (e) => { e.preventDefault(); showTab(tab); });
+    c.append(a);
+  }
+  return c;
+}
+
+async function renderOverview(caps, me, users, endpoints) {
+  const cards = el('ac-cards');
+  cards.replaceChildren();
+  const next = [];
+  if (users) {
+    const admins = users.filter((u) => u.roles.includes('admin')).length;
+    cards.append(card('People', String(users.length), `${admins} admin${admins === 1 ? '' : 's'}`, 'users'));
+  }
+  if (endpoints) {
+    const on = endpoints.filter((e) => e.is_enabled !== false);
+    const online = on.filter((e) => e.status === 'online').length;
+    const models = on.reduce((n, e) => n + (e.model_count ?? (e.models || []).length), 0);
+    cards.append(card('Model connections', String(on.length),
+      on.length ? `${online} online · ${models} models` : 'none yet', 'models'));
+    if (!on.length) next.push(['Connect a model so people can chat: Ollama, LM Studio or a cloud API.', 'models']);
+    else if (!online) next.push(['No model connection is online. Check that your model server is running.', 'models']);
+  }
+  if (caps.includes('compliance.review')) {
+    try {
+      const f = await api('/api/compliance/flags?status=open&limit=1');
+      const open = (f.counts || {}).open || 0;
+      cards.append(card('Open flags', String(open), open ? 'waiting for review' : 'nothing to review', 'compliance'));
+      tabBadge('compliance', open);
+    } catch { /* tab shows the error */ }
+  }
+  if (caps.includes('admin.view') || caps.includes('compliance.review')) {
+    try {
+      const v = await api('/api/audit/verify');
+      cards.append(card('Audit log', v.ok ? 'Intact' : 'Broken',
+        v.ok ? `${v.count} entries` : `first bad entry #${v.first_bad_id}`, 'audit'));
+      if (!v.ok) next.push(['The audit log failed its integrity check. Investigate before relying on it.', 'audit']);
+    } catch { /* ignore */ }
+  }
+  if (caps.includes('admin.manage') && me && !me.totp_enabled) {
+    try {
+      const t = await api('/api/auth/2fa/status');
+      if (!t.enabled) next.push(['Turn on two-factor sign-in for your admin account (app Settings → Account).', null]);
+    } catch { /* ignore */ }
+  }
+  const list = el('ac-next-list');
+  list.replaceChildren();
+  for (const [text, tab] of next) {
+    const li = node('li', text);
+    if (tab) {
+      const a = node('a', ' Open');
+      a.href = `#${tab}`;
+      a.addEventListener('click', (e) => { e.preventDefault(); showTab(tab); });
+      li.append(a);
+    }
+    list.append(li);
+  }
+  el('ac-next').hidden = !next.length;
+}
+
 async function load() {
   const brand = window.MAVEN_BRAND ? window.MAVEN_BRAND.name : '';
   el('ac-title').textContent = brand ? `${brand} Admin Console` : 'Admin Console';
@@ -362,9 +463,10 @@ async function load() {
   el('ac-viewonly').hidden = canManage;
   if (!canManage && caps.includes('compliance.review')) {
     el('ac-viewonly').textContent =
-      'Users and roles are view only (an Admin changes them). You can review flagged conversations below.';
+      'Users and roles are view only (an Admin changes them). You can review flagged conversations.';
   }
-  el('ac-compliance').hidden = !caps.includes('compliance.review');
+  buildTabs(caps);
+
   if (caps.includes('compliance.review')) {
     el('ac-flag-status').addEventListener('change', loadFlags);
     el('ac-settings-save').addEventListener('click', saveSettings);
@@ -375,18 +477,25 @@ async function load() {
     });
   }
 
-  el('ac-audit').hidden = false;
   el('ac-audit-filter').addEventListener('change', () => loadAudit());
   el('ac-audit-outcome').addEventListener('change', () => loadAudit());
   el('ac-audit-more').addEventListener('click', () => loadAudit(true));
   el('ac-audit-verify').addEventListener('click', verifyAudit);
   loadAudit();
 
+  let endpoints = null;
+  if (canManage) {
+    endpoints = await initModels().catch(() => null);
+    initSettings(me).catch((err) => {
+      el('ac-set-status').className = 'status error';
+      el('ac-set-status').textContent = err.message;
+    });
+  }
+
   const [catalogue, users] = await Promise.all([api('/api/auth/roles'), api('/api/auth/users')]);
   renderRoles(catalogue);
   renderUsers(users.users, catalogue, canManage, me.username);
-  el('ac-roles').hidden = false;
-  el('ac-users').hidden = false;
+  renderOverview(caps, me, users.users, endpoints);
 }
 
 load().catch((err) => {
