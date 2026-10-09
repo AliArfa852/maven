@@ -80,9 +80,19 @@ OpenAI-compatible servers) and with API providers.
 
 - **Ollama on the same computer** is found automatically. In Docker, start
   Ollama with `OLLAMA_HOST=0.0.0.0:11434` so the container can reach it.
-- **Anything else:** open **Settings → Added Models** and add an endpoint
-  (its base URL, plus an API key if it needs one). Maven probes it and lists
-  its models.
+- **Easiest (admins):** open the **Admin Console → Models & APIs**
+  (`/admin-console#models`) and click **Add a model**. Pick **On my computer
+  or network** (presets for Ollama, LM Studio, llama.cpp and vLLM) or
+  **Cloud API** (OpenAI, Anthropic, Gemini, OpenRouter, Mistral, DeepSeek,
+  Groq and more), paste the API key if it needs one, **Test connection**, then
+  **Save**. **Find local model servers** scans this computer and the hosts in
+  `LLM_HOST` / `LLM_HOSTS` for running servers. `localhost` works even when
+  Maven runs in Docker: Maven routes it to your computer.
+- The same tab sets the **default chat model** and the **utility model**
+  (used for titles and summaries), optionally for every user.
+- Sign-in based providers (GitHub Copilot, ChatGPT subscription) are added
+  in the app under **Settings → Added Models**, which also has every
+  advanced option.
 - **Cookbook** (in the sidebar) recommends models that fit your hardware and
   can download and serve them for you.
 
@@ -182,6 +192,20 @@ search your own chats.
 Admins add accounts under **Settings → Users**, where **Open signup** lets
 people register themselves. Then open the **Admin Console**: **Settings → Account → Admin
 Console**, or go straight to **http://localhost:7000/admin-console**.
+
+The console has tabs, and each person sees only the ones their roles allow:
+
+| Tab | What it does | Who sees it |
+| --- | --- | --- |
+| Overview | People, model connections, open flags, audit-log health, and next steps | Everyone with console access |
+| Users & roles | Roles and clearance for each person | Admin (change), Managers and Compliance (view) |
+| Models & APIs | Connect local model servers and cloud APIs, switch them on and off, default models | Admin |
+| Settings | Self sign-up, features on or off, web search provider and keys, assistant limits, public address | Admin |
+| Compliance | Flagged conversations and flagging rules | Compliance Officers |
+| Audit log | Who did what, with the integrity check | Admin, Managers, Compliance |
+
+Saved API keys are never shown again: leave a key box empty to keep the
+saved key, or type a new one to replace it.
 
 A person can hold **several roles**. Everyone holds Basic.
 
